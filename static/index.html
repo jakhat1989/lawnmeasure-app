@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LawnMeasure | Property Lawn Area Estimator</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#0b1714;color:#f2f8f3}
+*{box-sizing:border-box}body{margin:0}header{padding:19px 25px;background:#14271f;border-bottom:1px solid #2b4c3a;font-weight:850;font-size:23px}
+header span{color:#63ec9f}.layout{display:grid;grid-template-columns:345px minmax(0,1fr);gap:16px;padding:16px;max-width:1600px;margin:auto}
+.panel,.mapPanel{background:#15281f;border:1px solid #335240;border-radius:16px;overflow:hidden}
+.panel{padding:23px}h1{font-size:26px;letter-spacing:-.7px;margin:4px 0 9px}h2{font-size:16px;margin:22px 0 11px}
+p,.muted{color:#b3cbbb;font-size:13px;line-height:1.6}label{font-weight:700;font-size:13px;display:block;margin:17px 0 7px}
+input[type=text]{width:100%;padding:13px;border:1px solid #456852;border-radius:9px;background:#233b2c;color:white;font:inherit;font-size:14px}
+button{cursor:pointer;font:inherit;font-size:13px;border-radius:9px;padding:13px;border:1px solid #5c9670;background:#244b35;color:#eaffef}
+button:hover{filter:brightness(1.17)}button:disabled{opacity:.5;cursor:wait}
+button.primary{background:#69efa5;color:#0a3020;border-color:#69efa5;font-weight:800;margin-top:12px;width:100%}
+.buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.stat{background:#244535;border:1px solid #416e52;padding:17px;border-radius:12px;margin-top:18px}
+.stat small{display:block;color:#bad5c5}.stat strong{font-size:42px;letter-spacing:-1.7px;font-variant-numeric:tabular-nums}
+.stat em{font-size:12px;color:#c5d5c6;font-style:normal}
+#scope{color:#f3d48b;font-size:12px;margin-top:7px}
+#notice{font-size:12px;color:#f0dfb0;padding:11px 12px;background:#473e26;border-radius:9px;line-height:1.5;margin-top:12px}
+#error{color:#ffc4bb;margin:12px 0;font-size:13px;white-space:pre-line}
+.slabel{display:flex;justify-content:space-between;color:#c5decf;font-size:12px;margin-top:16px}
+input[type=range]{accent-color:#66eba0;width:100%}
+.mapPanel{display:flex;flex-direction:column;min-width:0;min-height:720px}
+.bar{padding:15px;background:#1b3427;display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px}
+.bar b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar small{font-size:10px;color:#a1b9aa}
+#map{flex:1;min-height:620px;background:radial-gradient(circle,#335b44,#182d22)}
+#empty{position:absolute;inset:60px 0 0;z-index:500;pointer-events:none;display:flex;align-items:center;justify-content:center;text-align:center;color:#d7eadf;padding:25px}
+.mapSpace{flex:1;position:relative;display:flex;min-height:0}
+.foot{font-size:10px;color:#b3c8b9;padding:11px 15px;background:#1a3024}
+.leaflet-container{font:inherit}.leaflet-control-attribution{font-size:10px!important}
+@media(max-width:850px){.layout{grid-template-columns:1fr}.mapPanel{min-height:520px}#map{min-height:480px}}
+</style>
+</head>
+<body>
+<header><span>✳</span> LawnMeasure</header>
+<div class="layout">
+<aside class="panel">
+<p style="color:#69efa5;font-size:10px;font-weight:800;letter-spacing:1.6px">ADDRESS-BASED LAWN ESTIMATOR</p>
+<h1>Measure lawns from above.</h1>
+<p>Type in a property address to inspect aerial imagery and estimate the lawn area in square feet. This tool is experimental; inspect the highlighted grass before quoting a customer.</p>
+<form id="form">
+<label for="address">Customer property address</label>
+<input type="text" id="address" placeholder="123 Main St, Florence, KY 41042" maxlength="220" autocomplete="street-address" required>
+<button class="primary" id="go" type="submit">Find &amp; measure lawn →</button>
+</form>
+<div id="error" role="alert"></div>
+<div class="stat">
+<small>Estimated grass-like area</small>
+<strong id="sqft">—</strong> <em>sq ft</em>
+<div id="scope">Enter an address to start.</div>
+</div>
+<p id="boundarySize" class="muted">Property/search boundary area: —</p>
+<div id="notice">Automatic grass detection can mistake trees, shrubs, and landscaping for grass. Check all measurements before using them.</div>
+<div class="slabel"><span>Grass detection sensitivity</span><b id="sensLabel">55</b></div>
+<input id="sens" type="range" min="0" max="100" value="55">
+<div class="slabel"><span>Search radius when parcel unknown</span><b id="radiusLabel">37 m</b></div>
+<input id="radius" type="range" min="15" max="120" value="37">
+<div class="buttons">
+<button id="redo" disabled>↻ Recalculate</button><button id="boundaryBtn" disabled>✎ Draw property</button>
+<button id="lawnBtn" disabled>✎ Draw lawn</button><button id="resetBtn" disabled>Reset drawings</button>
+</div>
+<p class="muted">If no parcel boundary is found, the result describes a <b>search zone</b>, not necessarily the customer's lawn. Draw the property boundary to correct it. Use “Draw lawn” to replace an automatic result with your own outlined lawn areas.</p>
+</aside>
+<section class="mapPanel">
+<div class="bar"><b id="mapTitle">Aerial overview</b><small>USGS / USDA public aerial imagery</small></div>
+<div class="mapSpace"><div id="map"></div><div id="empty">Enter an address to load an aerial image with highlighted grass.</div></div>
+<div class="foot">Experimental estimate • Not a survey • Imagery and address coverage depend on government sources</div>
+</section>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script>
+'use strict';
+const el=id=>document.getElementById(id);
+const map=L.map('map',{zoomSnap:.25}).setView([39.00,-84.63],15);
+let current=null,photo=null,overlay=null,line=null,custom=null,manual=[],drawMode=null,running=false;
+const manualGroup=L.featureGroup().addTo(map);
+const f=v=>Math.round(v).toLocaleString('en-US');
+function setBusy(x){
+  running=x;el('go').disabled=x;el('go').textContent=x?'Analyzing aerial photograph…':'Find & measure lawn →';
+  for(const id of ['redo','boundaryBtn','lawnBtn','resetBtn'])el(id).disabled=x||!current;
+}
+function manualArea(pts){
+  let lat0=pts.reduce((s,p)=>s+p.lat,0)/pts.length,cs=Math.cos(lat0*Math.PI/180),sum=0,r=6378137;
+  for(let i=0;i<pts.length;i++){let a=pts[i],b=pts[(i+1)%pts.length];
+    sum+=(a.lng*r*Math.PI/180*cs)*(b.lat*r*Math.PI/180)-(b.lng*r*Math.PI/180*cs)*(a.lat*r*Math.PI/180);
+  }return Math.abs(sum)/2*10.76391041671;
+}
+function stats(){
+  if(!current)return;
+  const drawn=manual.length>0;
+  el('sqft').textContent=f(drawn?manual.reduce((s,p)=>s+p.area,0):current.sqft);
+  el('scope').textContent=drawn?'Manually outlined lawn polygons':current.scope==='matched-parcel'?'Parcel matched • approximate grass':current.scope==='user-drawn'?'Custom property boundary • approximate grass':'Unverified search zone • NOT property-specific';
+  el('boundarySize').textContent='Boundary / search area: '+f(current.scope_sqft)+' sq ft';
+  el('notice').textContent=(drawn?'This result uses your manual lawn polygons. ':'' )+(current.warnings||[]).join(' ');
+  if(overlay){if(drawn && map.hasLayer(overlay))map.removeLayer(overlay);else if(!drawn && !map.hasLayer(overlay))overlay.addTo(map)}
+}
+function drawResult(result){
+  current=result;
+  for(const layer of [photo,overlay,line])if(layer)map.removeLayer(layer);
+  photo=L.imageOverlay(result.aerial_image,result.bounds).addTo(map);
+  overlay=L.imageOverlay(result.grass_overlay,result.bounds).addTo(map);
+  line=L.geoJSON(result.boundary,{style:{color:result.scope==='search-zone'?'#ffdf81':'#b4edff',weight:3,fillOpacity:.02,dashArray:result.scope==='search-zone'?'6 7':null}}).addTo(map);
+  map.fitBounds(result.bounds,{padding:[20,20]});el('mapTitle').textContent=result.address;
+  el('empty').style.display='none';stats();setTimeout(()=>map.invalidateSize(),60);
+}
+async function measure(){
+  if(running)return;
+  const address=el('address').value.trim();if(!address)return;
+  el('error').textContent='';setBusy(true);
+  try{
+    const payload={address,sensitivity:Number(el('sens').value),radius_m:Number(el('radius').value)};
+    if(custom)payload.custom_boundary=custom;
+    const r=await fetch('/api/measure',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const data=await r.json();if(!r.ok)throw new Error(data.error||'Measurement unavailable');
+    manual=[];manualGroup.clearLayers();drawResult(data);
+  }catch(e){el('error').textContent=e.message||'An error occurred.'}
+  finally{setBusy(false)}
+}
+el('form').addEventListener('submit',e=>{e.preventDefault();custom=null;manual=[];manualGroup.clearLayers();measure()});
+el('sens').addEventListener('input',()=>el('sensLabel').textContent=el('sens').value);
+el('radius').addEventListener('input',()=>el('radiusLabel').textContent=el('radius').value+' m');
+el('redo').addEventListener('click',measure);
+el('boundaryBtn').addEventListener('click',()=>{drawMode='boundary';new L.Draw.Polygon(map,{allowIntersection:false,shapeOptions:{color:'#b4edff'}}).enable()});
+el('lawnBtn').addEventListener('click',()=>{drawMode='lawn';new L.Draw.Polygon(map,{allowIntersection:false,shapeOptions:{color:'#f3e483'}}).enable()});
+map.on(L.Draw.Event.CREATED,async e=>{
+  let mode=drawMode;drawMode=null;
+  if(mode==='boundary'){custom=e.layer.toGeoJSON().geometry;await measure()}
+  else if(mode==='lawn'){let area=manualArea(e.layer.getLatLngs()[0]);e.layer.setStyle({color:'#f3e483',fillOpacity:.22});e.layer.bindTooltip(f(area)+' sq ft');manualGroup.addLayer(e.layer);manual.push({area,layer:e.layer});stats()}
+});
+el('resetBtn').addEventListener('click',async()=>{
+  manual=[];manualGroup.clearLayers();
+  if(custom){custom=null;await measure()}else stats();
+});
+</script>
+</body>
+</html>
