@@ -16,13 +16,13 @@
 <h3>Business profile</h3><label>Company name</label><input id="company" placeholder="Your lawn care business"><label>Business owner's email</label><input id="owner" type="email" placeholder="owner@business.com"><label>Business phone</label><input id="phone" placeholder="Business phone"><p class="hint">Business profile and rates are saved in this browser only, not shared with other devices.</p>
 </section>
 <section class="card"><h2>2. Aerial property view</h2><div class="map-btns"><button id="drawLawn" class="primary" disabled>+ Draw lawn</button><button id="drawExclude" disabled>− Exclude house / driveway</button><button id="finishDraw" disabled style="background:#156a3d;color:white">✓ Finish drawing</button><button id="cancelDraw" disabled>Cancel drawing</button><button id="undo" disabled>Undo last shape</button><button id="refresh" disabled>Refresh view</button>
-<button id="centerPin" disabled>⌖ Find house pin</button><button id="togglePin" disabled>Hide pin</button></div>
-<p id="pinStatus" role="status" class="hint" style="margin:0 0 12px;padding:9px;background:#ecf3ff;border-radius:8px">🏠 The searched home will be marked with a blue pin. Drag the pin if it isn't on the correct roof.</p><p id="drawingHint" role="status" class="hint" style="padding:9px 11px;background:#eaf4ec;border-radius:8px">Find an address, then select Draw lawn to begin.</p><div class="map-wrap"><div id="map"></div></div>
+<button id="centerPin" disabled>⌖ Find house pin</button><button id="placePin" disabled style="background:#d8e8ff;color:#1e4d94">⌖ Place pin on roof</button><button id="resetPin" disabled>Reset pin</button><button id="togglePin" disabled>Hide pin</button></div>
+<p id="pinStatus" role="status" class="hint" style="margin:0 0 12px;padding:9px;background:#ecf3ff;border-radius:8px">🏠 The searched home will get a house pin. A street-address result can be approximate; tap Place pin on roof for a correction that stays saved in this browser.</p><p id="drawingHint" role="status" class="hint" style="padding:9px 11px;background:#eaf4ec;border-radius:8px">Find an address, then select Draw lawn to begin.</p><div class="map-wrap"><div id="map"></div></div>
 <p id="imageryStatus" class="hint" role="status" aria-live="polite" style="background:#e7f6e9;padding:10px;border-radius:9px;margin:12px 0">Loading map provider settings…</p>
 <details style="border:1px solid #dee9dd;padding:10px;border-radius:9px;margin-top:10px">
  <summary style="font-weight:700;font-size:13px;cursor:pointer">Activate sharper nationwide aerial imagery — ArcGIS</summary>
  <p class="hint">The app supports <a href="https://location.arcgis.com/" target="_blank" rel="noopener">Esri ArcGIS Location Platform</a> World Imagery. It works across all 50 states. Photo detail varies and some areas will still have lower resolution.</p>
- <p class="hint">Create an ArcGIS Location Platform account and a browser API key with <strong>Location services → Basemaps</strong> access. Restrict the key's allowed referrers to <code>https://lawnquote-owner-tool.onrender.com</code>. Check <a href="https://location.arcgis.com/pricing/" target="_blank" rel="noopener">Esri pricing</a> and imagery rights for your business.</p>
+ <p class="hint">Create an ArcGIS Location Platform account and a browser API key with <strong>Location services → Basemaps</strong> access. Enable <strong>Geocoding / Places</strong> permissions as well to get better house address-point matches, if your account supports them. Alternatively, supply a separate server-side <code>ARCGIS_GEOCODING_API_KEY</code> with geocoding access in Render. Restrict the key's allowed referrers to <code>https://lawnquote-owner-tool.onrender.com</code>. Check <a href="https://location.arcgis.com/pricing/" target="_blank" rel="noopener">Esri pricing</a> and imagery rights for your business.</p>
  <p class="hint">In <a href="https://dashboard.render.com/web/srv-dba20i6q1p3s73a0r7sg" target="_blank" rel="noopener">Render → LawnQuote Owner → Environment</a>, add <code>ARCGIS_API_KEY</code> with your ArcGIS browser API key as the value. Save and redeploy, then refresh LawnQuote. Do not put your key into GitHub or this chat; restrict its usage by domain.</p>
  <p class="hint">After setup, ArcGIS World Imagery becomes the default. Kentucky 3-inch imagery and nationwide USGS imagery remain available as alternatives in the map selector.</p>
 </details><p class="hint">Nationwide: ArcGIS World Imagery when configured. Backups: KyFromAbove and USGS. Photograph age, sharpness, and availability vary by location. Drawn areas are estimates, not surveys.</p></section>
@@ -112,47 +112,111 @@ usgsTiles.on('tileerror',()=>{
  $('searchMsg').textContent='Aerial map tiles could not load. Switched to streets. Use the map layer selector to retry aerial.';
 });
 let origin=null,aerialLayer=null,shapes=[],sqft=0,mode='area',loading=false,activeDraw=null,areaRequestId=0,emailConfigured=false,aerialController=null;
-let housePin=null,housePinShown=true;
+let housePin=null,housePinShown=true,pinPlaceMode=false,originalPin=null,pinStorageKey='';
 const housePinIcon=L.divIcon({
  className:'house-pin-icon',
  html:'<div class="house-pin" aria-hidden="true"><span class="house-pin-tail"></span><span class="house-pin-body">🏠</span></div>',
  iconSize:[46,55],iconAnchor:[23,48],popupAnchor:[0,-42]
 });
+function housePinKey(address){
+ return 'lq_owner_house_pin_v1:'+String(address||'').trim().replace(/\s+/g,' ').toUpperCase();
+}
+function pinDistanceMeters(a,b){
+ const lat=(a.lat+b.lat)*Math.PI/360;
+ return Math.hypot((a.lat-b.lat)*111000,(a.lng-b.lng)*111000*Math.cos(lat));
+}
+function savedRoofPosition(key,base){
+ try{
+  const raw=JSON.parse(localStorage.getItem(key));
+  if(raw&&Number.isFinite(raw.lat)&&Number.isFinite(raw.lng)&&
+    Math.abs(raw.lat)<=90&&Math.abs(raw.lng)<=180&&
+    pinDistanceMeters(raw,base)<2000)return raw;
+ }catch(e){}
+ return null;
+}
+function showPinStatus(message){$('pinStatus').textContent=message}
+function pinNotice(d){
+ if(d.pin_accuracy==='address_point')
+  return '🏠 Address-point match (building/parcel estimate) via ArcGIS. Check the roof before quoting; some records still use an entrance point. Drag or tap Place pin on roof to correct.';
+ return '⚠️ Approximate Census address match — not confirmed on the roof. Tap Place pin on roof, then tap the actual roof. Your corrected location will be saved in this browser.';
+}
+function finishPinPlacement(){
+ pinPlaceMode=false;$('placePin').textContent='⌖ Place pin on roof';
+ map.getContainer().style.cursor='';
+}
+function adjustHousePin(location){
+ if(!housePin||!origin||!originalPin)return;
+ const newLocation=L.latLng(location);
+ if(pinDistanceMeters({lat:newLocation.lat,lng:newLocation.lng},originalPin)>2000){
+  showPinStatus('Location is too far from the searched address. Search the correct address first.');return;
+ }
+ housePin.setLatLng(newLocation);
+ origin.lat=newLocation.lat;origin.lon=newLocation.lng;
+ try{localStorage.setItem(pinStorageKey,JSON.stringify({
+  lat:newLocation.lat,lng:newLocation.lng,editedAt:new Date().toISOString()
+ }))}catch(e){showPinStatus('Pin moved, but this browser blocked saving the correction.');return}
+ showPinStatus('✓ House pin manually placed on the roof and saved in this browser for future searches. Lawn drawings and quote prices are unchanged.');
+}
 function setHousePin(d){
+ finishPinPlacement();
  if(housePin){map.removeLayer(housePin);housePin=null}
  housePinShown=true;
- housePin=L.marker([d.lat,d.lon],{
+ originalPin={lat:d.lat,lng:d.lon};
+ pinStorageKey=housePinKey(d.address);
+ const saved=savedRoofPosition(pinStorageKey,originalPin);
+ const location=saved||originalPin;
+ housePin=L.marker([location.lat,location.lng],{
   icon:housePinIcon,draggable:true,autoPan:true,zIndexOffset:1000,
-  title:'Searched property — drag pin to roof'
+  title:'Property house pin — drag to adjust rooftop position'
  }).addTo(map);
- housePin.bindTooltip('Address match (approximate). Drag onto the correct roof.',{
+ housePin.bindTooltip('House location — drag to correct',{
   direction:'top',offset:[0,-38]
  });
- housePin.bindPopup('🏠 Property location from address search. This may be on the road or nearby. Drag the pin onto the correct house roof.');
- housePin.on('dragend',()=>{
-  const point=housePin.getLatLng();
-  // The correction only repositions the map target; service polygons are unchanged.
-  if(origin){origin.lat=point.lat;origin.lon=point.lng}
-  $('pinStatus').textContent='🏠 House pin repositioned manually. Your lawn outlines and quote prices are unchanged. Use Find house pin to return here.';
- });
- for(const id of ['centerPin','togglePin'])$(id).disabled=false;
+ housePin.bindPopup('🏠 House location marker. Check the roof visually, then drag or tap Place pin on roof. Manually placed pins are remembered in this browser.');
+ housePin.on('dragend',()=>adjustHousePin(housePin.getLatLng()));
+ for(const id of ['centerPin','placePin','resetPin','togglePin'])$(id).disabled=false;
  $('togglePin').textContent='Hide pin';
- $('pinStatus').textContent='🏠 Blue pin marks the address lookup, which may be approximate. Drag it directly onto the correct house roof. It does not change measured lawn square footage.';
+ origin.lat=location.lat;origin.lon=location.lng;
+ showPinStatus(saved?'✓ Using your previously saved house-roof pin. Drag it or tap Reset pin if you need to correct it.':pinNotice(d));
 }
 $('centerPin').onclick=()=>{
  if(!housePin)return;
- if(!housePinShown){
-  housePin.addTo(map);housePinShown=true;$('togglePin').textContent='Hide pin';
- }
+ if(!housePinShown){housePin.addTo(map);housePinShown=true;$('togglePin').textContent='Hide pin'}
  map.setView(housePin.getLatLng(),Math.max(19,map.getZoom()));
  housePin.openPopup();
 };
+$('placePin').onclick=()=>{
+ if(!housePin)return;
+ pinPlaceMode=!pinPlaceMode;
+ if(pinPlaceMode){
+  if(activeDraw)cancelActive();
+  if(!housePinShown){housePin.addTo(map);housePinShown=true;$('togglePin').textContent='Hide pin'}
+  $('placePin').textContent='Cancel pin placement';
+  map.getContainer().style.cursor='crosshair';
+  showPinStatus('🎯 Tap directly on the center of the house roof in the aerial map. That position will replace the pin and be saved in this browser.');
+ }else finishPinPlacement();
+};
+map.on('click',event=>{
+ if(!pinPlaceMode||!housePin||activeDraw)return;
+ adjustHousePin(event.latlng);
+ finishPinPlacement();
+});
+$('resetPin').onclick=()=>{
+ if(!housePin||!originalPin)return;
+ finishPinPlacement();
+ try{localStorage.removeItem(pinStorageKey)}catch(e){}
+ const p=L.latLng(originalPin);
+ housePin.setLatLng(p);
+ origin.lat=p.lat;origin.lon=p.lng;
+ showPinStatus('Pin reset to the geocoding result (may be approximate). Use Place pin on roof to save a manual correction again.');
+};
 $('togglePin').onclick=()=>{
  if(!housePin)return;
+ finishPinPlacement();
  housePinShown=!housePinShown;
  if(housePinShown)housePin.addTo(map);else map.removeLayer(housePin);
  $('togglePin').textContent=housePinShown?'Hide pin':'Show pin';
- $('pinStatus').textContent=housePinShown?'🏠 Pin visible. Drag it to adjust the house location.':'House pin hidden so you can trace the property. Tap Show pin to restore it.';
+ showPinStatus(housePinShown?'🏠 Pin visible. You may drag it onto the roof.':'House pin hidden to let you trace the property. Tap Show pin to restore it.');
 };
 let nationwideTiles=null,nationwideConfigured=false,nationwideTileLoads=0,nationwideTileErrors=0;
 const drawingLayers=L.featureGroup().addTo(map);
@@ -269,9 +333,10 @@ $('searchForm').onsubmit=async e=>{
  try{
   const d=await api('/api/address?q='+encodeURIComponent($('address').value.trim()));
   cancelActive();clearCompleted();origin={...d};$('address').value=d.address;
-  map.invalidateSize();map.setView([d.lat,d.lon],19);
-  const mapSource=chooseImagery(d);
   setHousePin(d);
+  const pinLocation=housePin.getLatLng();
+  map.invalidateSize();map.setView(pinLocation,19);
+  const mapSource=chooseImagery(d);
   $('searchMsg').textContent=mapSource==='nationwide'?
    'Property located. Loading nationwide ArcGIS World Imagery…':
    mapSource==='kentucky'?
@@ -354,6 +419,7 @@ function clearCompleted(){
 }
 function enableDraw(type){
  if(!origin){$('searchMsg').textContent='Search for an address first.';return}
+ finishPinPlacement();
  cancelActive();
  mode=type;
  activeDraw=new L.Draw.Polygon(map,{allowIntersection:false,showArea:true,
