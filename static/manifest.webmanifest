@@ -1,0 +1,9 @@
+{
+  "name": "LawnQuote Owner",
+  "short_name": "LawnQuote",
+  "description": "Private lawn quote measuring and pricing tool for business owners",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#eef4ee",
+  "theme_color": "#143823"
+}
