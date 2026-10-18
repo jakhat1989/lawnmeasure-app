@@ -11,16 +11,38 @@
 <h3>Business profile</h3><label>Company name</label><input id="company" placeholder="Your lawn care business"><label>Business owner's email</label><input id="owner" type="email" placeholder="owner@business.com"><label>Business phone</label><input id="phone" placeholder="Business phone"><p class="hint">Business profile and rates are saved in this browser only, not shared with other devices.</p>
 </section>
 <section class="card"><h2>2. Aerial property view</h2><div class="map-btns"><button id="drawLawn" class="primary" disabled>+ Draw lawn</button><button id="drawExclude" disabled>− Exclude house / driveway</button><button id="finishDraw" disabled style="background:#156a3d;color:white">✓ Finish drawing</button><button id="cancelDraw" disabled>Cancel drawing</button><button id="undo" disabled>Undo last shape</button><button id="refresh" disabled>Refresh view</button></div><p id="drawingHint" role="status" class="hint" style="padding:9px 11px;background:#eaf4ec;border-radius:8px">Find an address, then select Draw lawn to begin.</p><div class="map-wrap"><div id="map"></div></div><p class="hint">Aerial imagery: USDA/USGS NAIP via The National Map. Zoom or pan to inspect the property. Manual boundaries are approximate, not surveyed.</p></section>
-<section class="card"><h2>3. Services & quote</h2><div class="row"><input id="newService" placeholder="New service name"><button id="addService">Add</button></div><p class="hint">Check services to include in the quote. Enter a rate per 1,000 sq ft and an optional minimum charge.</p><div id="services"></div><h3>Customer details</h3><label>Customer name</label><input id="customerName" placeholder="Customer name"><label>Customer email</label><input id="customerEmail" type="email" placeholder="customer@example.com"><label>Quote notes</label><textarea id="notes" rows="3" placeholder="Services, schedule or estimate notes"></textarea><hr style="border:none;border-top:1px solid #e1e8e1;margin:18px 0"><div class="hint">Total estimated selected services</div><div id="total" class="total">$0.00</div><button class="primary" id="send" style="width:100%;margin:12px 0">Email customer + business owner</button><button id="copy" style="width:100%">Copy estimate text</button><p id="emailStatus" class="status"></p><p class="hint">Email delivery requires a verified sending domain and Resend API key on the app server. Without this setup, copy the estimate instead. Email sends only when you press the button.</p></section>
+<section class="card"><h2>3. Services & quote</h2><div class="row"><input id="newService" placeholder="New service name"><button id="addService">Add</button></div><p class="hint">Check services to include in the quote. Enter a rate per 1,000 sq ft and an optional minimum charge.</p><div id="services"></div><h3>Customer details</h3><label>Customer name</label><input id="customerName" placeholder="Customer name"><label>Customer email</label><input id="customerEmail" type="email" placeholder="customer@example.com"><label>Quote notes</label><textarea id="notes" rows="3" placeholder="Services, schedule or estimate notes"></textarea><hr style="border:none;border-top:1px solid #e1e8e1;margin:18px 0"><div class="hint">Total estimated selected services</div><div id="total" class="total">$0.00</div><button class="primary" id="send" style="width:100%;margin:12px 0">Open email app — customer + owner CC</button><button id="copy" style="width:100%">Copy estimate text</button><p id="emailStatus" class="status" role="status" aria-live="polite"></p>
+<details id="emailSetup" style="margin-top:12px;padding:12px;background:#f0f6ef;border-radius:9px">
+  <summary style="cursor:pointer;font-weight:700;font-size:13px">Enable hands-free email delivery</summary>
+  <p class="hint">When not configured, the Email button opens your phone or computer email app with the customer in To and the business owner in CC. You still need to review and press Send. To send automatically from LawnQuote:</p>
+  <ol class="hint" style="padding-left:20px">
+   <li>Verify a domain you own at <a href="https://resend.com/domains" target="_blank" rel="noopener noreferrer">Resend Domains</a>.</li>
+   <li>Create a sending-only API key at <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer">Resend API Keys</a>.</li>
+   <li>In the <a href="https://dashboard.render.com/web/srv-dba20i6q1p3s73a0r7sg" target="_blank" rel="noopener noreferrer">LawnQuote Render service</a>, open <b>Environment</b> and add <code>RESEND_API_KEY</code> with the new secret key and <code>RESEND_FROM_EMAIL</code> with a sender such as <code>quotes@yourdomain.com</code> (it must match your verified domain).</li>
+   <li>Choose <b>Save and deploy</b>. Refresh LawnQuote. The button will switch to automatic delivery.</li>
+  </ol>
+  <p class="hint">Keep your API key private; never paste it into a quote, GitHub, or chat. No sending domain is configured yet.</p>
+</details></section>
 </main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script><script>
 const $=id=>document.getElementById(id),fmt=n=>Math.round(n).toLocaleString('en-US'),usd=n=>'$'+Number(n).toFixed(2);
-const map=L.map('map',{zoomControl:true}).setView([39.02,-84.61],16);let origin=null,aerialLayer=null,shapes=[],sqft=0,mode='area',loading=false,activeDraw=null,areaRequestId=0;const drawingLayers=L.featureGroup().addTo(map);
+const map=L.map('map',{zoomControl:true}).setView([39.02,-84.61],16);let origin=null,aerialLayer=null,shapes=[],sqft=0,mode='area',loading=false,activeDraw=null,areaRequestId=0,emailConfigured=false;const drawingLayers=L.featureGroup().addTo(map);
 let services=JSON.parse(localStorage.getItem('lq_services')||'null')||[{id:1,name:'Mowing',rate:25,minimum:40,selected:true},{id:2,name:'Fertilization',rate:12,minimum:0,selected:false},{id:3,name:'Weed Control',rate:15,minimum:0,selected:false}];
 for(const [id,key] of [['company','company'],['owner','owner'],['phone','phone']]){$(id).value=localStorage.getItem('lq_'+key)||'';$(id).addEventListener('input',()=>localStorage.setItem('lq_'+key,$(id).value))}
 async function api(url,opts){const r=await fetch(url,opts);let data=await r.json();if(!r.ok)throw Error(data.error||'Request failed');return data}
 const post=(url,body)=>api(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-async function status(){try{let s=await api('/api/status');$('lock').classList.toggle('hidden',s.authenticated);if(!s.email_configured)$('emailStatus').textContent='Automatic email not configured yet. You can copy quotes.'}catch(e){$('lockMsg').textContent=e.message}}
+async function status(){
+ try{
+  let s=await api('/api/status');
+  $('lock').classList.toggle('hidden',s.authenticated);
+  emailConfigured=!!s.email_configured;
+  $('send').textContent=emailConfigured?'Automatically email customer + business owner':'Open email app — customer + owner CC';
+  $('emailStatus').textContent=emailConfigured?
+   'Automatic delivery is configured. Check the recipient addresses, then press Email.':
+   'Manual email mode: your email app will open with the estimate ready. You must press Send yourself. For automatic sending, use the setup instructions below.';
+  $('emailSetup').open=!emailConfigured;
+ }catch(e){$('lockMsg').textContent=e.message}
+}
 $('login').onsubmit=async e=>{e.preventDefault();try{await post('/api/login',{code:$('code').value});$('code').value='';await status()}catch(ex){$('lockMsg').textContent=ex.message}};
 $('logout').onclick=async()=>{await post('/api/logout',{});await status()};
 function saveServices(){localStorage.setItem('lq_services',JSON.stringify(services));renderServices()}
@@ -120,9 +142,60 @@ $('clearDrawings').onclick=()=>{
  $('drawingHint').textContent='All drawings removed. Total square footage reset to 0. Start a new lawn outline whenever you are ready.';
 };
 function selected(){return services.filter(s=>s.selected).map(s=>({name:s.name,rate:s.rate,minimum:s.minimum}))}
-function quoteText(){const rows=selected().map(s=>s.name+': '+usd((sqft>0?Math.max(s.minimum,s.rate*sqft/1000):0)));return [$('company').value||'LawnQuote','Property: '+$('address').value,'Customer: '+$('customerName').value,'Measured area: '+fmt(sqft)+' sq ft',...rows,'Total estimate: '+$('total').textContent,$('notes').value,'Approximate aerial measurements, subject to onsite verification.'].join('\n')}
+function quoteText(){
+ const rows=selected().map(s=>s.name+' ('+usd(s.rate)+' per 1,000 sq ft): '+
+  usd(sqft>0?Math.max(s.minimum,s.rate*sqft/1000):0));
+ return [
+  $('company').value||'LawnQuote',
+  'Lawn Service Estimate',
+  'Property: '+$('address').value,
+  'Customer: '+($('customerName').value||'Customer'),
+  'Measured service area: '+fmt(sqft)+' sq ft',
+  '',
+  ...rows,'','Estimated total: '+$('total').textContent,
+  $('notes').value,
+  $('phone').value?'Contact: '+$('phone').value:'',
+  'Measurements are approximate and prices are subject to onsite verification.'
+ ].filter((x,i)=>x!==''||i>0).join('\n');
+}
 $('copy').onclick=async()=>{try{await navigator.clipboard.writeText(quoteText());$('emailStatus').textContent='Estimate copied.'}catch(e){$('emailStatus').textContent='Copy failed: '+e.message}};
-$('send').onclick=async()=>{if(!sqft){$('emailStatus').textContent='Draw the lawn first.';return}if(!selected().length){$('emailStatus').textContent='Select a service.';return}let ok=confirm('Send the estimate to both the customer and the business owner now?');if(!ok)return;
-$('emailStatus').textContent='Sending…';try{let d=await post('/api/send',{...payload(),company:$('company').value,owner_email:$('owner').value,phone:$('phone').value,customer_name:$('customerName').value,customer_email:$('customerEmail').value,services:selected(),notes:$('notes').value});$('emailStatus').textContent=d.message+' Customer: '+(d.results.customer.accepted?'accepted':'failed')+'; Business owner: '+(d.results.owner.accepted?'accepted':'failed')}catch(ex){$('emailStatus').textContent=ex.message}};
+function isEmail(v){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((v||'').trim())}
+function openEmailDraft(){
+ const customer=$('customerEmail').value.trim(),owner=$('owner').value.trim();
+ if(!isEmail(customer)){ $('emailStatus').textContent='Enter a valid customer email address.';return}
+ if(!isEmail(owner)){ $('emailStatus').textContent='Enter a valid business owner email address.';return}
+ if(customer.toLowerCase()===owner.toLowerCase()){ $('emailStatus').textContent='Use different customer and business emails.';return}
+ if(!sqft||!selected().length){$('emailStatus').textContent='Draw the lawn and select a service first.';return}
+ const subject=($('company').value||'LawnQuote')+' — Lawn Service Estimate — '+$('address').value;
+ const link='mailto:'+encodeURIComponent(customer)+'?cc='+encodeURIComponent(owner)+
+   '&subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(quoteText());
+ $('emailStatus').textContent='Opening your email app. Review the draft and press Send; opening it does not send anything. If no email app opens, use Copy estimate text.';
+ window.location.href=link;
+}
+$('send').onclick=async()=>{
+ if(!sqft){$('emailStatus').textContent='Draw the lawn first.';return}
+ if(!selected().length){$('emailStatus').textContent='Select at least one service.';return}
+ const customer=$('customerEmail').value.trim(),owner=$('owner').value.trim();
+ if(!isEmail(customer)||!isEmail(owner)){
+  $('emailStatus').textContent='Enter a valid customer email and business owner email.';return;
+ }
+ if(customer.toLowerCase()===owner.toLowerCase()){
+  $('emailStatus').textContent='Customer and owner emails must be different.';return;
+ }
+ if(!emailConfigured){openEmailDraft();return}
+ if(!confirm('Send the estimate automatically to both the customer and the business owner now?'))return;
+ $('emailStatus').textContent='Submitting estimate for delivery…';
+ try{
+  let d=await post('/api/send',{...payload(),company:$('company').value,
+   owner_email:owner,phone:$('phone').value,
+   customer_name:$('customerName').value,customer_email:customer,
+   services:selected(),notes:$('notes').value});
+  $('emailStatus').textContent=d.message+' Customer: '+(d.results.customer.accepted?'accepted':'failed')+
+    '; Business owner: '+(d.results.owner.accepted?'accepted':'failed')+
+    '. Accepted does not guarantee inbox delivery.';
+ }catch(ex){
+  $('emailStatus').textContent=ex.message+' If email setup is incomplete, use the setup instructions below.';
+ }
+};
 renderServices();status();
 </script></body></html>
