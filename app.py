@@ -1,210 +1,191 @@
-"""LawnMeasure: experimental lawn vegetation estimator from US public aerial imagery.
-Square footage is approximate and must be reviewed before quoting.
-"""
-from __future__ import annotations
-import base64, io, json, math, re
-from difflib import SequenceMatcher
-from functools import lru_cache
-import numpy as np
+import os, hmac, math, re, html, time, logging
+from io import BytesIO
+from functools import wraps
 import requests
-from flask import Flask, jsonify, request
-from PIL import Image, ImageDraw
-from scipy.ndimage import binary_closing, binary_opening, uniform_filter
-from shapely.geometry import Point, shape, mapping
-from shapely.ops import transform
+from flask import Flask, jsonify, request, session, send_file, send_from_directory
+from shapely.geometry import shape
+from shapely.ops import transform, unary_union
 
-app=Flask(__name__)
-CENSUS="https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
-NAIP="https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer/exportImage"
-BOONE="https://secure.boonecountygis.com/server/rest/services/ParcelLayers/MapServer/32/query"
-R=6378137.; PX=768; FT=10.76391041671
+app=Flask(__name__,static_folder="static")
+app.config.update(SECRET_KEY=os.getenv("APP_SECRET_KEY","local-development-only"),
+ SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE="Lax",
+ SESSION_COOKIE_SECURE=os.getenv("RENDER","").lower()=="true",
+ PERMANENT_SESSION_LIFETIME=1209600,MAX_CONTENT_LENGTH=512000)
 http=requests.Session()
-http.headers["User-Agent"]="LawnMeasure/1.0 (US aerial imagery estimator)"
+http.headers["User-Agent"]="LawnQuoteOwner/1.0"
+failed={}
+R=6378137.0; SFT=10.76391041671
+CENSUS="https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
+NAIP="https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPPlus/ImageServer/exportImage"
 
-class MapUnavailable(Exception): pass
-
-def get_json(url, params):
-    try:
-        res=http.get(url, params=params, timeout=26);res.raise_for_status()
-        data=res.json()
-        if isinstance(data,dict) and data.get("error"):
-            raise MapUnavailable(str(data["error"].get("message","Mapping provider error")))
-        return data
-    except (requests.RequestException,ValueError) as exc:
-        raise MapUnavailable("Mapping service unavailable. Please try again.") from exc
-
-@lru_cache(maxsize=128)
-def geocode(address):
-    matches=get_json(CENSUS,{"address":address,"benchmark":"Public_AR_Current","format":"json"}).get("result",{}).get("addressMatches",[])
-    if not matches: raise ValueError("Address not found. Enter street address, city and state.")
-    m=matches[0]
-    return dict(lat=float(m["coordinates"]["y"]), lon=float(m["coordinates"]["x"]),
-                address=m.get("matchedAddress",address),state=m.get("addressComponents",{}).get("state",""))
-
-def mx(lon): return math.radians(lon)*R
-def my(lat): return R*math.log(math.tan(math.pi/4+math.radians(max(-85,min(85,lat)))/2))
-def ilon(x): return math.degrees(x/R)
-def ilat(y): return math.degrees(2*math.atan(math.exp(y/R))-math.pi/2)
-
-def norm(value):
-    substitutions={"STREET":"ST","ROAD":"RD","AVENUE":"AVE","DRIVE":"DR","LANE":"LN","COURT":"CT",
-      "BOULEVARD":"BLVD","PLACE":"PL","PARKWAY":"PKWY","CIRCLE":"CIR","HIGHWAY":"HWY","NORTH":"N",
-      "SOUTH":"S","EAST":"E","WEST":"W"}
-    s=re.sub(r"[^A-Z0-9 ]"," ",value.upper())
-    return " ".join(substitutions.get(w,w) for w in s.split())
-
-def county_boundary(address,lon,lat):
-    if not (-85<lon<-84.45 and 38.75<lat<39.25): return None
-    street=norm(address.split(",")[0])
-    match=re.match(r"^(\d+[A-Z]?)\s+(.+)$",street)
-    if not match: return None
-    house,road=match.groups()
-    prefix=" ".join(road.split()[:2]).replace("'","''")
-    try:
-        features=get_json(BOONE,{"where":f"SITEADD1 LIKE '{house} {prefix}%'",
-            "outFields":"SITEADD1,PIDN","outSR":4326,"returnGeometry":"true",
-            "resultRecordCount":100,"f":"geojson"}).get("features",[])
-    except MapUnavailable: return None
-    candidates=[]
-    for f in features:
-        try:
-            site=norm(str(f.get("properties",{}).get("SITEADD1") or ""))
-            if not site or site.split()[0]!=house: continue
-            score=SequenceMatcher(None,street,site).ratio()
-            if score<.80: continue
-            p=shape(f["geometry"])
-            if not p.is_valid:p=p.buffer(0)
-            if p.is_empty or p.geom_type not in ("Polygon","MultiPolygon"): continue
-            distance=p.distance(Point(lon,lat))*111000
-            if distance>500:continue
-            candidates.append((score-distance/100000,p))
-        except (KeyError,ValueError,TypeError,IndexError):continue
-    return max(candidates,key=lambda x:x[0])[1] if candidates else None
-
-def bbox_for(poly,lat,lon,radius):
-    cs=max(.1,math.cos(math.radians(lat)))
-    if poly is None:
-        side=max(radius*2.7,95)/cs
-        cx,cy=mx(lon),my(lat)
-    else:
-        mapped=transform(lambda x,y,z=None:(np.radians(x)*R,
-          R*np.log(np.tan(np.pi/4+np.radians(np.clip(y,-85,85))/2))),poly)
-        x1,y1,x2,y2=mapped.bounds
-        side=max(max((x2-x1)*cs,(y2-y1)*cs)*1.16+15,85)/cs
-        cx,cy=(x1+x2)/2,(y1+y2)/2
-    return cx-side/2,cy-side/2,cx+side/2,cy+side/2
-
-def image(bbox,rendering):
-    x1,y1,x2,y2=bbox
-    args={"bbox":f"{x1},{y1},{x2},{y2}","bboxSR":3857,"imageSR":3857,
-      "size":f"{PX},{PX}","format":"jpg","interpolation":"RSP_NearestNeighbor","f":"image"}
-    if rendering:args["renderingRule"]=json.dumps({"rasterFunction":rendering})
-    try:
-        r=http.get(NAIP,params=args,timeout=50);r.raise_for_status()
-        if not r.headers.get("content-type","").lower().startswith("image/"):
-            raise MapUnavailable("Aerial imagery isn't available for that property.")
-        return Image.open(io.BytesIO(r.content)).convert("RGB")
-    except (requests.RequestException,OSError,ValueError) as exc:
-        raise MapUnavailable("USGS aerial imagery unavailable. Try another address.") from exc
-
-def polygon_mask(poly,bbox):
-    out=Image.new("L",(PX,PX),0)
-    d=ImageDraw.Draw(out)
-    x1,y1,x2,y2=bbox
-    def point(x,y):return ((mx(x)-x1)/(x2-x1)*PX,(y2-my(y))/(y2-y1)*PX)
-    for p in [poly] if poly.geom_type=="Polygon" else poly.geoms:
-        d.polygon([point(x,y) for x,y in p.exterior.coords],fill=255)
-        for hole in p.interiors:
-            d.polygon([point(x,y) for x,y in hole.coords],fill=0)
-    return np.asarray(out)>127
-
-def grass_mask(natural,falsecolor,sensitivity):
-    rgb=np.asarray(natural,dtype=np.float32)
-    red,green,blue=rgb[:,:,0],rgb[:,:,1],rgb[:,:,2]
-    gray=.299*red+.587*green+.114*blue
-    mean=uniform_filter(gray,size=9)
-    texture=np.sqrt(np.maximum(0,uniform_filter(gray*gray,size=9)-mean*mean))
-    t=max(0,min(100,sensitivity))/100
-    if falsecolor is not None:
-        fc=np.asarray(falsecolor,dtype=np.float32)
-        nir,visible_red=fc[:,:,0],fc[:,:,1]
-        proxy=(nir-visible_red)/(nir+visible_red+1e-6)
-        veg=(proxy>.18-t*.14)&(nir>65-t*14)
-    else:
-        veg=(green>red*(1.08-t*.28))&(green>blue*(1.05-t*.25))&(green>43)
-    mask=veg&(texture<15+t*27)&(gray>37-t*10)&(gray<244)
-    mask=binary_opening(mask,structure=np.ones((3,3),dtype=bool))
-    return binary_closing(mask,structure=np.ones((4,4),dtype=bool))
-
-def png_mask(mask):
-    arr=np.zeros((PX,PX,4),dtype=np.uint8)
-    arr[mask]=[36,240,112,112]
-    buf=io.BytesIO();Image.fromarray(arr,"RGBA").save(buf,format="PNG")
-    return "data:image/png;base64,"+base64.b64encode(buf.getvalue()).decode()
-
-def jpeg(img):
-    buf=io.BytesIO();img.save(buf,format="JPEG",quality=86)
-    return "data:image/jpeg;base64,"+base64.b64encode(buf.getvalue()).decode()
-
+def err(message,status=400):return jsonify(error=message),status
+def authorized(fn):
+ @wraps(fn)
+ def wrapped(*args,**kwargs):
+  if not session.get("owner"):return err("Sign in to continue.",401)
+  return fn(*args,**kwargs)
+ return wrapped
+def configured():return bool(os.getenv("RESEND_API_KEY") and os.getenv("RESEND_FROM_EMAIL"))
 @app.get("/")
-def home():
-    from flask import send_from_directory
-    return send_from_directory("static","index.html")
-
+def home():return send_from_directory("static","index.html")
 @app.get("/health")
-def health(): return jsonify(ok=True, service="LawnMeasure")
-
-@app.post("/api/measure")
-def measure():
-    args=request.get_json(silent=True) or {}
-    addr=str(args.get("address","")).strip()
-    if not 8<=len(addr)<=220:return jsonify(error="Enter a full street address including city and state."),400
-    try:
-        sensitivity=max(0,min(100,int(args.get("sensitivity",55))))
-        radius=max(15,min(150,int(args.get("radius_m",37))))
-        loc=geocode(addr)
-        lat,lon=loc["lat"],loc["lon"]
-        polygon=None;scope="search-zone"
-        custom=args.get("custom_boundary")
-        if custom:
-            polygon=shape(custom)
-            if not polygon.is_valid:polygon=polygon.buffer(0)
-            if polygon.is_empty or polygon.geom_type not in ("Polygon","MultiPolygon"):
-                raise ValueError("Draw a valid polygon.")
-            if polygon.area>.0003 or polygon.distance(Point(lon,lat))>.03:
-                raise ValueError("Drawn boundary is too large or too far away.")
-            scope="user-drawn"
-        elif loc["state"]=="KY":
-            polygon=county_boundary(loc["address"],lon,lat)
-            if polygon is not None:scope="matched-parcel"
-        if polygon is None:
-            x,y=mx(lon),my(lat)
-            cs=max(.1,math.cos(math.radians(lat)))
-            polygon=transform(lambda xx,yy,z=None:(ilon(xx),ilat(yy)),
-                  Point(x,y).buffer(radius/cs,resolution=80))
-        box=bbox_for(polygon if scope!="search-zone" else None,lat,lon,radius)
-        natural=image(box,"NaturalColor")
-        try:false=image(box,"FalseColorComposite")
-        except MapUnavailable:false=None
-        roi=polygon_mask(polygon,box)
-        grass=grass_mask(natural,false,sensitivity)&roi
-        x1,y1,x2,y2=box
-        coslat=math.cos(math.radians(lat))
-        pixel_area=(x2-x1)*(y2-y1)/PX**2*coslat**2*FT
-        warnings=["Experimental image-color/texture vegetation detection may mistake trees, shrubs, shadows and landscaping for lawn."]
-        if scope=="search-zone":warnings.insert(0,"No confirmed parcel. This is a circular search-zone estimate, NOT property-specific lawn square footage. Draw the actual property boundary.")
-        if false is None:warnings.append("False-color imagery unavailable; detection used the less reliable visible-green approximation.")
-        return jsonify(address=loc["address"],location={"lat":lat,"lon":lon},
-            sqft=round(float(grass.sum())*pixel_area),
-            scope_sqft=round(float(roi.sum())*pixel_area),
-            scope=scope, bounds=[[ilat(y1),ilon(x1)],[ilat(y2),ilon(x2)]],
-            aerial_image=jpeg(natural),grass_overlay=png_mask(grass),
-            boundary=mapping(polygon.simplify(.0000008,preserve_topology=True)),
-            warnings=warnings,imagery_attribution="USGS / USDA / The National Map – NAIP")
-    except ValueError as exc:return jsonify(error=str(exc)),422
-    except MapUnavailable as exc:return jsonify(error=str(exc)),503
-    except Exception:
-        app.logger.exception("Measurement failed")
-        return jsonify(error="Unexpected measurement error. Try another address."),500
-
-if __name__=="__main__":app.run(host="0.0.0.0",port=5000)
+def health():return jsonify(ok=True,product="LawnQuote Owner")
+@app.get("/api/status")
+def status():return jsonify(authenticated=bool(session.get("owner")),email_configured=configured())
+@app.post("/api/login")
+def login():
+ code=os.getenv("OWNER_ACCESS_CODE")
+ if not code:return err("Owner access code is not configured.",503)
+ ip=request.remote_addr or "-"
+ now=time.time()
+ recent=[t for t in failed.get(ip,[]) if now-t<900]
+ if len(recent)>=12:return err("Too many attempts. Try again in 15 minutes.",429)
+ value=str((request.get_json(silent=True) or {}).get("code",""))
+ if not hmac.compare_digest(value,code):
+  recent.append(now);failed[ip]=recent
+  return err("Incorrect access code.",401)
+ failed.pop(ip,None);session.clear();session.permanent=True;session["owner"]=True
+ return jsonify(ok=True)
+@app.post("/api/logout")
+def logout():session.clear();return jsonify(ok=True)
+def number(value,low,high,name):
+ try:
+  n=float(value)
+  if math.isfinite(n) and low<=n<=high:return n
+ except (TypeError,ValueError):pass
+ raise ValueError("Invalid "+name)
+def merc(lon,lat):
+ return R*math.radians(lon),R*math.log(math.tan(math.pi/4+math.radians(lat)/2))
+def unmerc(x,y):
+ return math.degrees(x/R),math.degrees(2*math.atan(math.exp(y/R))-math.pi/2)
+def bounding(lat,lon,radius):
+ x,y=merc(lon,lat); half=radius/max(.2,math.cos(math.radians(lat)))
+ return (x-half,y-half,x+half,y+half)
+@app.get("/api/address")
+@authorized
+def address():
+ q=request.args.get("q","").strip()
+ if not 8<=len(q)<=220:return err("Enter an address with street, city and state.")
+ try:
+  r=http.get(CENSUS,params={"address":q,"benchmark":"Public_AR_Current","format":"json"},timeout=18)
+  r.raise_for_status()
+  found=r.json().get("result",{}).get("addressMatches",[])
+  if not found:return err("Address not found. Include city, state and ZIP.",404)
+  m=found[0];lat=float(m["coordinates"]["y"]);lon=float(m["coordinates"]["x"])
+  return jsonify(address=m.get("matchedAddress",q),lat=lat,lon=lon)
+ except (requests.RequestException,KeyError,ValueError,TypeError):
+  return err("Address search unavailable. Try again.",502)
+@app.get("/api/aerial")
+@authorized
+def aerial():
+ try:
+  lat=number(request.args.get("lat"),18,72,"latitude")
+  lon=number(request.args.get("lon"),-170,-60,"longitude")
+  radius=number(request.args.get("radius",90),25,600,"view radius")
+ except ValueError as e:return err(str(e))
+ b=bounding(lat,lon,radius)
+ try:
+  r=http.get(NAIP,params={"bbox":",".join(map(str,b)),"bboxSR":3857,"imageSR":3857,
+    "size":"1200,1200","format":"jpg","f":"image"},timeout=55)
+  r.raise_for_status()
+  if not r.headers.get("content-type","").startswith("image/"):
+   return err("No aerial imagery available at this location.",502)
+  resp=send_file(BytesIO(r.content),mimetype="image/jpeg")
+  resp.headers["Cache-Control"]="private, max-age=900"
+  return resp
+ except requests.RequestException:return err("USGS imagery service is temporarily unavailable.",502)
+def parse_shapes(data,field):
+ a=data.get(field,[])
+ if not isinstance(a,list) or len(a)>75:raise ValueError("Too many outlines.")
+ polys=[]
+ for item in a:
+  p=shape(item)
+  if p.geom_type!="Polygon" or not p.is_valid or len(p.exterior.coords)>500:
+   raise ValueError("Invalid polygon. Avoid self-crossing lines.")
+  for lon,lat in p.exterior.coords:
+   if not (-170<lon<-60 and 18<lat<72):
+    raise ValueError("Outline coordinates outside supported region.")
+  polys.append(p)
+ return polys
+def measured(data):
+ areas=parse_shapes(data,"areas");exclusions=parse_shapes(data,"exclusions")
+ if not areas:return {"area_sqft":0,"gross_sqft":0,"excluded_sqft":0}
+ joined=unary_union(areas)
+ if joined.bounds[2]-joined.bounds[0]>.05 or joined.bounds[3]-joined.bounds[1]>.05:
+  raise ValueError("Drawing is too large.")
+ net=joined.difference(unary_union(exclusions)) if exclusions else joined
+ coslat=math.cos(math.radians(joined.centroid.y))
+ def meters(x,y,z=None):return math.radians(x)*R*coslat,math.radians(y)*R
+ gross=transform(meters,joined).area*SFT
+ area=transform(meters,net).area*SFT
+ if gross>50000000:raise ValueError("Drawing exceeds supported property size.")
+ return {"area_sqft":round(area),"gross_sqft":round(gross),"excluded_sqft":round(max(0,gross-area))}
+@app.post("/api/area")
+@authorized
+def area():
+ try:return jsonify(measured(request.get_json(silent=True) or {}))
+ except (ValueError,TypeError,KeyError) as e:return err(str(e))
+def valid_email(v):
+ v=str(v or "").strip()
+ if len(v)>254 or not re.fullmatch(r"[^@\s]{1,100}@[^@\s]+\.[^@\s]{2,}",v):
+  raise ValueError("Enter a valid email address.")
+ return v
+def clean(v,n=120):return str(v or "").strip()[:n]
+def money(v):return chr(36)+format(v,",.2f")
+@app.post("/api/send")
+@authorized
+def send():
+ if not configured():return err("Email sending requires RESEND_API_KEY and RESEND_FROM_EMAIL in Render.",503)
+ data=request.get_json(silent=True) or {}
+ try:
+  measure=measured(data);sqft=measure["area_sqft"]
+  if sqft<1:raise ValueError("Draw the area being priced before sending.")
+  customer=valid_email(data.get("customer_email"))
+  owner=valid_email(data.get("owner_email"))
+  if owner.lower()==customer.lower():raise ValueError("Customer and owner email must be different.")
+  company=clean(data.get("company"),80) or "LawnQuote"
+  address=clean(data.get("address"),220)
+  if len(address)<8:raise ValueError("Enter the property address.")
+  customer_name=clean(data.get("customer_name"),100) or "Customer"
+  phone=clean(data.get("phone"),50)
+  notes=clean(data.get("notes"),900)
+  selected=data.get("services",[])
+  if not isinstance(selected,list) or not 1<=len(selected)<=25:raise ValueError("Choose a service.")
+  lines=[]
+  for s in selected:
+   name=clean(s.get("name"),80)
+   if not name:raise ValueError("Service name is missing.")
+   rate=number(s.get("rate"),0,100000,"service rate")
+   minimum=number(s.get("minimum",0),0,100000,"minimum price")
+   price=round(max(sqft/1000*rate,minimum)+1e-9,2)
+   lines.append((name,rate,price))
+  total=round(sum(row[2] for row in lines),2)
+ except (ValueError,TypeError,KeyError,AttributeError) as e:return err(str(e))
+ rows="".join("<tr><td style='padding:12px;border-bottom:1px solid #dde4dd'>"+
+     html.escape(name)+" ("+money(rate)+" / 1,000 sq ft)</td><td style='text-align:right'>"+
+     money(price)+"</td></tr>" for name,rate,price in lines)
+ body=("<div style='font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#1c392b'>"
+   "<h1>"+html.escape(company)+"</h1><h2>Lawn Service Estimate</h2><p>Prepared for "+
+   html.escape(customer_name)+"<br>Property: "+html.escape(address)+"</p><p><strong>Manually drawn service area: "+
+   format(sqft,",")+" square feet</strong></p><table style='width:100%;border-collapse:collapse'>"+
+   rows+"</table><h2>Total estimate: "+money(total)+"</h2><p>"+
+   html.escape(notes)+"</p><p>"+html.escape(phone)+"</p><p style='color:#777;font-size:12px'>"
+   "Approximate aerial measurements; prices subject to on-site verification.</p></div>")
+ template={"from":os.getenv("RESEND_FROM_EMAIL"),"reply_to":owner,
+  "subject":company+" | Lawn Service Estimate | "+address,"html":body}
+ results={}
+ for label,receiver in (("customer",customer),("owner",owner)):
+  try:
+   res=http.post("https://api.resend.com/emails",
+      headers={"Authorization":"Bearer "+os.environ["RESEND_API_KEY"],"Content-Type":"application/json"},
+      json={**template,"to":[receiver]},timeout=20)
+   res.raise_for_status()
+   results[label]={"accepted":True,"id":res.json().get("id")}
+  except (requests.RequestException,ValueError) as ex:
+   logging.warning("Email %s failed: %s",label,type(ex).__name__)
+   results[label]={"accepted":False}
+ ok=all(r["accepted"] for r in results.values())
+ return jsonify(ok=ok,results=results,total=total,sqft=sqft,
+  message=("Both emails accepted by sending service." if ok else
+     "One or more sends failed. Check statuses before retrying to avoid duplicates.")),(200 if ok else 207)
+if __name__=="__main__":app.run(host="0.0.0.0",port=int(os.getenv("PORT",5000)))
