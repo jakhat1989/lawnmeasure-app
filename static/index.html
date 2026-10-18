@@ -1,5 +1,10 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#123626"><link rel="manifest" href="/static/manifest.webmanifest"><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"><title>LawnQuote Owner</title><style>
-*{box-sizing:border-box}body{margin:0;font-family:system-ui,Arial;background:#eef4ee;color:#173a26}header{background:#143823;color:#fff;padding:15px 22px;display:flex;align-items:center;justify-content:space-between}header b{font-size:22px}header span{color:#7bf1a4}main{display:grid;grid-template-columns:350px 1fr 350px;gap:13px;max-width:1800px;margin:auto;padding:14px}.card{background:white;border-radius:15px;box-shadow:0 1px 8px #193a2116;padding:17px;min-width:0}h2{font-size:17px;margin:0 0 15px}h3{font-size:14px;margin:16px 0 8px}label{font-size:12px;font-weight:700;display:block;margin:12px 0 5px}input,textarea{width:100%;padding:10px;border:1px solid #cbdace;border-radius:8px;font:inherit;font-size:14px}input[type=checkbox]{width:auto}button{padding:11px;border:0;border-radius:9px;cursor:pointer;background:#e3ede5;color:#153922;font-weight:650}button.primary{background:#238d52;color:white}button:disabled{opacity:.5;cursor:not-allowed}.row{display:flex;gap:7px}.row>*{flex:1;min-width:0}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}.grid2 label{margin:3px 0}.map-wrap{position:relative;min-height:600px}#map{height:620px;border-radius:12px;background:#cbd8cb}.map-btns{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0}.measure{background:#e7f7ed;border-radius:12px;padding:15px;margin:15px 0}.measure strong{font-size:35px}.measure small{display:block}.service{padding:11px 0;border-bottom:1px solid #e3ece3}.service .row{align-items:center}.service input[type=number]{width:86px}.service input[type=checkbox]{flex:0}.service .name{flex:2}.service button{flex:0}.total{font-size:30px;font-weight:800;text-align:right}.hint{font-size:12px;color:#607365;line-height:1.5}.status{font-size:12px;line-height:1.6;white-space:pre-wrap;color:#88562f}.lock{position:fixed;inset:0;background:#0d2919d9;display:flex;align-items:center;justify-content:center;z-index:9999;padding:22px}.lock .card{max-width:400px;width:100%}.lock p{font-size:13px;color:#587563}.hidden{display:none!important}@media(max-width:1250px){main{grid-template-columns:300px 1fr}main>.card:last-child{grid-column:1/-1}}@media(max-width:720px){main{grid-template-columns:1fr}main>.card:last-child{grid-column:auto}#map{height:440px}.map-wrap{min-height:440px}}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,Arial;background:#eef4ee;color:#173a26}header{background:#143823;color:#fff;padding:15px 22px;display:flex;align-items:center;justify-content:space-between}header b{font-size:22px}header span{color:#7bf1a4}main{display:grid;grid-template-columns:350px 1fr 350px;gap:13px;max-width:1800px;margin:auto;padding:14px}.card{background:white;border-radius:15px;box-shadow:0 1px 8px #193a2116;padding:17px;min-width:0}h2{font-size:17px;margin:0 0 15px}h3{font-size:14px;margin:16px 0 8px}label{font-size:12px;font-weight:700;display:block;margin:12px 0 5px}input,textarea{width:100%;padding:10px;border:1px solid #cbdace;border-radius:8px;font:inherit;font-size:14px}input[type=checkbox]{width:auto}button{padding:11px;border:0;border-radius:9px;cursor:pointer;background:#e3ede5;color:#153922;font-weight:650}button.primary{background:#238d52;color:white}button:disabled{opacity:.5;cursor:not-allowed}.row{display:flex;gap:7px}.row>*{flex:1;min-width:0}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}.grid2 label{margin:3px 0}.map-wrap{position:relative;min-height:600px}#map{height:620px;border-radius:12px;background:#cbd8cb}.map-btns{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0}.measure{background:#e7f7ed;border-radius:12px;padding:15px;margin:15px 0}.measure strong{font-size:35px}.measure small{display:block}.service{padding:11px 0;border-bottom:1px solid #e3ece3}.service .row{align-items:center}.service input[type=number]{width:86px}.service input[type=checkbox]{flex:0}.service .name{flex:2}.service button{flex:0}.total{font-size:30px;font-weight:800;text-align:right}.hint{font-size:12px;color:#607365;line-height:1.5}.status{font-size:12px;line-height:1.6;white-space:pre-wrap;color:#88562f}.lock{position:fixed;inset:0;background:#0d2919d9;display:flex;align-items:center;justify-content:center;z-index:9999;padding:22px}.lock .card{max-width:400px;width:100%}.lock p{font-size:13px;color:#587563}
+.house-pin-icon{background:transparent!important;border:0!important}
+.house-pin{position:relative;width:46px;height:55px;filter:drop-shadow(0 2px 4px #0b2d3380)}
+.house-pin-body{position:absolute;top:1px;left:4px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;background:#1767df;border:3px solid white;border-radius:50%;font-size:19px}
+.house-pin-tail{position:absolute;top:32px;left:17px;width:12px;height:12px;background:#1767df;transform:rotate(45deg);border-right:2px solid white;border-bottom:2px solid white}
+.hidden{display:none!important}@media(max-width:1250px){main{grid-template-columns:300px 1fr}main>.card:last-child{grid-column:1/-1}}@media(max-width:720px){main{grid-template-columns:1fr}main>.card:last-child{grid-column:auto}#map{height:440px}.map-wrap{min-height:440px}}
 </style></head><body><header><b>🌿 Lawn<span>Quote</span> <small style="font-size:11px;font-weight:400">OWNER</small></b><button id="logout">Sign out</button></header>
 <div id="lock" class="lock"><section class="card"><h2>Private business owner access</h2><p>Enter the access code configured on the app server. This is a private quoting tool, not a customer portal.</p><form id="login"><label>Owner access code</label><input type="password" id="code" required autocomplete="current-password"><button class="primary" style="width:100%;margin-top:14px">Sign in</button></form><p id="lockMsg" class="status"></p></section></div>
 <main>
@@ -10,7 +15,9 @@
 <button id="clearDrawings" style="background:#ffe8e3;color:#9b3022">✕ Clear all drawings &amp; reset area</button>
 <h3>Business profile</h3><label>Company name</label><input id="company" placeholder="Your lawn care business"><label>Business owner's email</label><input id="owner" type="email" placeholder="owner@business.com"><label>Business phone</label><input id="phone" placeholder="Business phone"><p class="hint">Business profile and rates are saved in this browser only, not shared with other devices.</p>
 </section>
-<section class="card"><h2>2. Aerial property view</h2><div class="map-btns"><button id="drawLawn" class="primary" disabled>+ Draw lawn</button><button id="drawExclude" disabled>− Exclude house / driveway</button><button id="finishDraw" disabled style="background:#156a3d;color:white">✓ Finish drawing</button><button id="cancelDraw" disabled>Cancel drawing</button><button id="undo" disabled>Undo last shape</button><button id="refresh" disabled>Refresh view</button></div><p id="drawingHint" role="status" class="hint" style="padding:9px 11px;background:#eaf4ec;border-radius:8px">Find an address, then select Draw lawn to begin.</p><div class="map-wrap"><div id="map"></div></div>
+<section class="card"><h2>2. Aerial property view</h2><div class="map-btns"><button id="drawLawn" class="primary" disabled>+ Draw lawn</button><button id="drawExclude" disabled>− Exclude house / driveway</button><button id="finishDraw" disabled style="background:#156a3d;color:white">✓ Finish drawing</button><button id="cancelDraw" disabled>Cancel drawing</button><button id="undo" disabled>Undo last shape</button><button id="refresh" disabled>Refresh view</button>
+<button id="centerPin" disabled>⌖ Find house pin</button><button id="togglePin" disabled>Hide pin</button></div>
+<p id="pinStatus" role="status" class="hint" style="margin:0 0 12px;padding:9px;background:#ecf3ff;border-radius:8px">🏠 The searched home will be marked with a blue pin. Drag the pin if it isn't on the correct roof.</p><p id="drawingHint" role="status" class="hint" style="padding:9px 11px;background:#eaf4ec;border-radius:8px">Find an address, then select Draw lawn to begin.</p><div class="map-wrap"><div id="map"></div></div>
 <p id="imageryStatus" class="hint" role="status" aria-live="polite" style="background:#e7f6e9;padding:10px;border-radius:9px;margin:12px 0">Loading map provider settings…</p>
 <details style="border:1px solid #dee9dd;padding:10px;border-radius:9px;margin-top:10px">
  <summary style="font-weight:700;font-size:13px;cursor:pointer">Activate sharper nationwide aerial imagery — ArcGIS</summary>
@@ -105,6 +112,48 @@ usgsTiles.on('tileerror',()=>{
  $('searchMsg').textContent='Aerial map tiles could not load. Switched to streets. Use the map layer selector to retry aerial.';
 });
 let origin=null,aerialLayer=null,shapes=[],sqft=0,mode='area',loading=false,activeDraw=null,areaRequestId=0,emailConfigured=false,aerialController=null;
+let housePin=null,housePinShown=true;
+const housePinIcon=L.divIcon({
+ className:'house-pin-icon',
+ html:'<div class="house-pin" aria-hidden="true"><span class="house-pin-tail"></span><span class="house-pin-body">🏠</span></div>',
+ iconSize:[46,55],iconAnchor:[23,48],popupAnchor:[0,-42]
+});
+function setHousePin(d){
+ if(housePin){map.removeLayer(housePin);housePin=null}
+ housePinShown=true;
+ housePin=L.marker([d.lat,d.lon],{
+  icon:housePinIcon,draggable:true,autoPan:true,zIndexOffset:1000,
+  title:'Searched property — drag pin to roof'
+ }).addTo(map);
+ housePin.bindTooltip('Address match (approximate). Drag onto the correct roof.',{
+  direction:'top',offset:[0,-38]
+ });
+ housePin.bindPopup('🏠 Property location from address search. This may be on the road or nearby. Drag the pin onto the correct house roof.');
+ housePin.on('dragend',()=>{
+  const point=housePin.getLatLng();
+  // The correction only repositions the map target; service polygons are unchanged.
+  if(origin){origin.lat=point.lat;origin.lon=point.lng}
+  $('pinStatus').textContent='🏠 House pin repositioned manually. Your lawn outlines and quote prices are unchanged. Use Find house pin to return here.';
+ });
+ for(const id of ['centerPin','togglePin'])$(id).disabled=false;
+ $('togglePin').textContent='Hide pin';
+ $('pinStatus').textContent='🏠 Blue pin marks the address lookup, which may be approximate. Drag it directly onto the correct house roof. It does not change measured lawn square footage.';
+}
+$('centerPin').onclick=()=>{
+ if(!housePin)return;
+ if(!housePinShown){
+  housePin.addTo(map);housePinShown=true;$('togglePin').textContent='Hide pin';
+ }
+ map.setView(housePin.getLatLng(),Math.max(19,map.getZoom()));
+ housePin.openPopup();
+};
+$('togglePin').onclick=()=>{
+ if(!housePin)return;
+ housePinShown=!housePinShown;
+ if(housePinShown)housePin.addTo(map);else map.removeLayer(housePin);
+ $('togglePin').textContent=housePinShown?'Hide pin':'Show pin';
+ $('pinStatus').textContent=housePinShown?'🏠 Pin visible. Drag it to adjust the house location.':'House pin hidden so you can trace the property. Tap Show pin to restore it.';
+};
 let nationwideTiles=null,nationwideConfigured=false,nationwideTileLoads=0,nationwideTileErrors=0;
 const drawingLayers=L.featureGroup().addTo(map);
 function mapLayerSelected(layer){return !!(layer&&map.hasLayer(layer))}
@@ -219,9 +268,10 @@ $('searchForm').onsubmit=async e=>{
  e.preventDefault();$('searchMsg').textContent='Finding the property…';
  try{
   const d=await api('/api/address?q='+encodeURIComponent($('address').value.trim()));
-  cancelActive();clearCompleted();origin=d;$('address').value=d.address;
+  cancelActive();clearCompleted();origin={...d};$('address').value=d.address;
   map.invalidateSize();map.setView([d.lat,d.lon],19);
   const mapSource=chooseImagery(d);
+  setHousePin(d);
   $('searchMsg').textContent=mapSource==='nationwide'?
    'Property located. Loading nationwide ArcGIS World Imagery…':
    mapSource==='kentucky'?
