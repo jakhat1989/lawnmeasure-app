@@ -27,10 +27,10 @@ def authorized(fn):
  return wrapped
 def configured():return bool(os.getenv("RESEND_API_KEY") and os.getenv("RESEND_FROM_EMAIL"))
 def public_satellite_token():
- token=os.getenv("MAPBOX_PUBLIC_TOKEN","").strip()
- # Mapbox public tokens are designed for browser delivery. Never expose secret tokens.
- if token.startswith("pk.") and len(token)<600:return token
- return ""
+ # ArcGIS Location Platform browser API key: restrict to the site's HTTPS referrer.
+ # It is an app access token (not an admin or personal account secret).
+ token=os.getenv("ARCGIS_API_KEY","").strip()
+ return token if 24<=len(token)<=2200 and " " not in token else ""
 @app.get("/")
 def home():return send_from_directory("static","index.html")
 @app.get("/health")
@@ -41,7 +41,7 @@ def status():return jsonify(authenticated=bool(session.get("owner")),
 @app.get("/api/map-config")
 @authorized
 def map_config():
- response=jsonify(provider="mapbox" if public_satellite_token() else "government_fallback",
+ response=jsonify(provider="arcgis" if public_satellite_token() else "government_fallback",
                   public_token=public_satellite_token(),
                   provider_configured=bool(public_satellite_token()),
                   max_zoom=21)
