@@ -83,17 +83,33 @@ def aerial():
   lon=number(request.args.get("lon"),-170,-60,"longitude")
   radius=number(request.args.get("radius",90),25,600,"view radius")
  except ValueError as e:return err(str(e))
- b=bounding(lat,lon,radius)
- try:
-  r=http.get(NAIP,params={"bbox":",".join(map(str,b)),"bboxSR":3857,"imageSR":3857,
-    "size":"1200,1200","format":"jpg","f":"image"},timeout=55)
-  r.raise_for_status()
-  if not r.headers.get("content-type","").startswith("image/"):
-   return err("No aerial imagery available at this location.",502)
-  resp=send_file(BytesIO(r.content),mimetype="image/jpeg")
-  resp.headers["Cache-Control"]="private, max-age=900"
-  return resp
- except requests.RequestException:return err("USGS imagery service is temporarily unavailable.",502)
+ box=bounding(lat,lon,radius)
+ params={"bbox":",".join(map(str,box)),"bboxSR":3857,"imageSR":3857,
+    "size":"900,900","format":"jpg","f":"image"}
+ providers=[
+  ("USGS NAIP Imagery","https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer/exportImage"),
+  ("USGS NAIP Plus",NAIP),
+ ]
+ for name,url in providers:
+  try:
+   r=http.get(url,params=params,timeout=(4,11))
+   r.raise_for_status()
+   if not r.headers.get("Content-Type","").lower().startswith("image/"):
+    logging.warning("Aerial provider %s returned non-image content",name)
+    continue
+   if len(r.content)<1000 or not (r.content.startswith(bytes.fromhex("ffd8")) or
+                                 r.content.startswith(bytes.fromhex("89504e47"))):
+    logging.warning("Aerial provider %s returned invalid image bytes",name)
+    continue
+   mimetype="image/png" if r.content.startswith(bytes.fromhex("89504e47")) else "image/jpeg"
+   resp=send_file(BytesIO(r.content),mimetype=mimetype)
+   resp.headers["Cache-Control"]="private,max-age=600"
+   resp.headers["X-Imagery-Source"]=name
+   return resp
+  except requests.RequestException as exc:
+   logging.warning("Aerial provider %s temporarily unavailable: %s",name,type(exc).__name__)
+ # This error does not prevent using the separate USGS tile basemap in the app.
+ return err("High-resolution aerial imagery is temporarily unavailable. Continue with the USGS aerial basemap.",503)
 def parse_shapes(data,field):
  a=data.get(field,[])
  if not isinstance(a,list) or len(a)>75:raise ValueError("Too many outlines.")
