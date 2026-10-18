@@ -1,143 +1,54 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LawnMeasure | Property Lawn Area Estimator</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
-<style>
-:root{color-scheme:dark;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#0b1714;color:#f2f8f3}
-*{box-sizing:border-box}body{margin:0}header{padding:19px 25px;background:#14271f;border-bottom:1px solid #2b4c3a;font-weight:850;font-size:23px}
-header span{color:#63ec9f}.layout{display:grid;grid-template-columns:345px minmax(0,1fr);gap:16px;padding:16px;max-width:1600px;margin:auto}
-.panel,.mapPanel{background:#15281f;border:1px solid #335240;border-radius:16px;overflow:hidden}
-.panel{padding:23px}h1{font-size:26px;letter-spacing:-.7px;margin:4px 0 9px}h2{font-size:16px;margin:22px 0 11px}
-p,.muted{color:#b3cbbb;font-size:13px;line-height:1.6}label{font-weight:700;font-size:13px;display:block;margin:17px 0 7px}
-input[type=text]{width:100%;padding:13px;border:1px solid #456852;border-radius:9px;background:#233b2c;color:white;font:inherit;font-size:14px}
-button{cursor:pointer;font:inherit;font-size:13px;border-radius:9px;padding:13px;border:1px solid #5c9670;background:#244b35;color:#eaffef}
-button:hover{filter:brightness(1.17)}button:disabled{opacity:.5;cursor:wait}
-button.primary{background:#69efa5;color:#0a3020;border-color:#69efa5;font-weight:800;margin-top:12px;width:100%}
-.buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
-.stat{background:#244535;border:1px solid #416e52;padding:17px;border-radius:12px;margin-top:18px}
-.stat small{display:block;color:#bad5c5}.stat strong{font-size:42px;letter-spacing:-1.7px;font-variant-numeric:tabular-nums}
-.stat em{font-size:12px;color:#c5d5c6;font-style:normal}
-#scope{color:#f3d48b;font-size:12px;margin-top:7px}
-#notice{font-size:12px;color:#f0dfb0;padding:11px 12px;background:#473e26;border-radius:9px;line-height:1.5;margin-top:12px}
-#error{color:#ffc4bb;margin:12px 0;font-size:13px;white-space:pre-line}
-.slabel{display:flex;justify-content:space-between;color:#c5decf;font-size:12px;margin-top:16px}
-input[type=range]{accent-color:#66eba0;width:100%}
-.mapPanel{display:flex;flex-direction:column;min-width:0;min-height:720px}
-.bar{padding:15px;background:#1b3427;display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px}
-.bar b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bar small{font-size:10px;color:#a1b9aa}
-#map{flex:1;min-height:620px;background:radial-gradient(circle,#335b44,#182d22)}
-#empty{position:absolute;inset:60px 0 0;z-index:500;pointer-events:none;display:flex;align-items:center;justify-content:center;text-align:center;color:#d7eadf;padding:25px}
-.mapSpace{flex:1;position:relative;display:flex;min-height:0}
-.foot{font-size:10px;color:#b3c8b9;padding:11px 15px;background:#1a3024}
-.leaflet-container{font:inherit}.leaflet-control-attribution{font-size:10px!important}
-@media(max-width:850px){.layout{grid-template-columns:1fr}.mapPanel{min-height:520px}#map{min-height:480px}}
-</style>
-</head>
-<body>
-<header><span>✳</span> LawnMeasure</header>
-<div class="layout">
-<aside class="panel">
-<p style="color:#69efa5;font-size:10px;font-weight:800;letter-spacing:1.6px">ADDRESS-BASED LAWN ESTIMATOR</p>
-<h1>Measure lawns from above.</h1>
-<p>Type in a property address to inspect aerial imagery and estimate the lawn area in square feet. This tool is experimental; inspect the highlighted grass before quoting a customer.</p>
-<form id="form">
-<label for="address">Customer property address</label>
-<input type="text" id="address" placeholder="123 Main St, Florence, KY 41042" maxlength="220" autocomplete="street-address" required>
-<button class="primary" id="go" type="submit">Find &amp; measure lawn →</button>
-</form>
-<div id="error" role="alert"></div>
-<div class="stat">
-<small>Estimated grass-like area</small>
-<strong id="sqft">—</strong> <em>sq ft</em>
-<div id="scope">Enter an address to start.</div>
-</div>
-<p id="boundarySize" class="muted">Property/search boundary area: —</p>
-<div id="notice">Automatic grass detection can mistake trees, shrubs, and landscaping for grass. Check all measurements before using them.</div>
-<div class="slabel"><span>Grass detection sensitivity</span><b id="sensLabel">55</b></div>
-<input id="sens" type="range" min="0" max="100" value="55">
-<div class="slabel"><span>Search radius when parcel unknown</span><b id="radiusLabel">37 m</b></div>
-<input id="radius" type="range" min="15" max="120" value="37">
-<div class="buttons">
-<button id="redo" disabled>↻ Recalculate</button><button id="boundaryBtn" disabled>✎ Draw property</button>
-<button id="lawnBtn" disabled>✎ Draw lawn</button><button id="resetBtn" disabled>Reset drawings</button>
-</div>
-<p class="muted">If no parcel boundary is found, the result describes a <b>search zone</b>, not necessarily the customer's lawn. Draw the property boundary to correct it. Use “Draw lawn” to replace an automatic result with your own outlined lawn areas.</p>
-</aside>
-<section class="mapPanel">
-<div class="bar"><b id="mapTitle">Aerial overview</b><small>USGS / USDA public aerial imagery</small></div>
-<div class="mapSpace"><div id="map"></div><div id="empty">Enter an address to load an aerial image with highlighted grass.</div></div>
-<div class="foot">Experimental estimate • Not a survey • Imagery and address coverage depend on government sources</div>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#123626"><link rel="manifest" href="/static/manifest.webmanifest"><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"><title>LawnQuote Owner</title><style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,Arial;background:#eef4ee;color:#173a26}header{background:#143823;color:#fff;padding:15px 22px;display:flex;align-items:center;justify-content:space-between}header b{font-size:22px}header span{color:#7bf1a4}main{display:grid;grid-template-columns:350px 1fr 350px;gap:13px;max-width:1800px;margin:auto;padding:14px}.card{background:white;border-radius:15px;box-shadow:0 1px 8px #193a2116;padding:17px;min-width:0}h2{font-size:17px;margin:0 0 15px}h3{font-size:14px;margin:16px 0 8px}label{font-size:12px;font-weight:700;display:block;margin:12px 0 5px}input,textarea{width:100%;padding:10px;border:1px solid #cbdace;border-radius:8px;font:inherit;font-size:14px}input[type=checkbox]{width:auto}button{padding:11px;border:0;border-radius:9px;cursor:pointer;background:#e3ede5;color:#153922;font-weight:650}button.primary{background:#238d52;color:white}button:disabled{opacity:.5;cursor:not-allowed}.row{display:flex;gap:7px}.row>*{flex:1;min-width:0}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}.grid2 label{margin:3px 0}.map-wrap{position:relative;min-height:600px}#map{height:620px;border-radius:12px;background:#cbd8cb}.map-btns{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0}.measure{background:#e7f7ed;border-radius:12px;padding:15px;margin:15px 0}.measure strong{font-size:35px}.measure small{display:block}.service{padding:11px 0;border-bottom:1px solid #e3ece3}.service .row{align-items:center}.service input[type=number]{width:86px}.service input[type=checkbox]{flex:0}.service .name{flex:2}.service button{flex:0}.total{font-size:30px;font-weight:800;text-align:right}.hint{font-size:12px;color:#607365;line-height:1.5}.status{font-size:12px;line-height:1.6;white-space:pre-wrap;color:#88562f}.lock{position:fixed;inset:0;background:#0d2919d9;display:flex;align-items:center;justify-content:center;z-index:9999;padding:22px}.lock .card{max-width:400px;width:100%}.lock p{font-size:13px;color:#587563}.hidden{display:none!important}@media(max-width:1250px){main{grid-template-columns:300px 1fr}main>.card:last-child{grid-column:1/-1}}@media(max-width:720px){main{grid-template-columns:1fr}main>.card:last-child{grid-column:auto}#map{height:440px}.map-wrap{min-height:440px}}
+</style></head><body><header><b>🌿 Lawn<span>Quote</span> <small style="font-size:11px;font-weight:400">OWNER</small></b><button id="logout">Sign out</button></header>
+<div id="lock" class="lock"><section class="card"><h2>Private business owner access</h2><p>Enter the access code configured on the app server. This is a private quoting tool, not a customer portal.</p><form id="login"><label>Owner access code</label><input type="password" id="code" required autocomplete="current-password"><button class="primary" style="width:100%;margin-top:14px">Sign in</button></form><p id="lockMsg" class="status"></p></section></div>
+<main>
+<section class="card">
+<h2>1. Property & drawing</h2><label>Customer property address</label><form id="searchForm"><input id="address" placeholder="123 Main St, Florence, KY 41042" required><button class="primary" style="width:100%;margin-top:8px">Find property & zoom in</button></form><p id="searchMsg" class="status"></p>
+<div class="measure"><small>Net drawn service area</small><strong id="area">0</strong> <small>square feet</small><p class="hint" id="areaExtra">Draw a lawn area on the map.</p></div>
+<h3>How to measure</h3><p class="hint">Draw one or more green polygons for the lawn you want to service. Draw red exclusion polygons over the house, driveway, patio, beds, or other non-service areas. Only the net green area is priced. You can draw and adjust outlines yourself; there is no AI grass detection.</p>
+<button id="clearDrawings">Clear all drawings</button>
+<h3>Business profile</h3><label>Company name</label><input id="company" placeholder="Your lawn care business"><label>Business owner's email</label><input id="owner" type="email" placeholder="owner@business.com"><label>Business phone</label><input id="phone" placeholder="Business phone"><p class="hint">Business profile and rates are saved in this browser only, not shared with other devices.</p>
 </section>
-</div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
-<script>
-'use strict';
-const el=id=>document.getElementById(id);
-const map=L.map('map',{zoomSnap:.25}).setView([39.00,-84.63],15);
-let current=null,photo=null,overlay=null,line=null,custom=null,manual=[],drawMode=null,running=false;
-const manualGroup=L.featureGroup().addTo(map);
-const f=v=>Math.round(v).toLocaleString('en-US');
-function setBusy(x){
-  running=x;el('go').disabled=x;el('go').textContent=x?'Analyzing aerial photograph…':'Find & measure lawn →';
-  for(const id of ['redo','boundaryBtn','lawnBtn','resetBtn'])el(id).disabled=x||!current;
-}
-function manualArea(pts){
-  let lat0=pts.reduce((s,p)=>s+p.lat,0)/pts.length,cs=Math.cos(lat0*Math.PI/180),sum=0,r=6378137;
-  for(let i=0;i<pts.length;i++){let a=pts[i],b=pts[(i+1)%pts.length];
-    sum+=(a.lng*r*Math.PI/180*cs)*(b.lat*r*Math.PI/180)-(b.lng*r*Math.PI/180*cs)*(a.lat*r*Math.PI/180);
-  }return Math.abs(sum)/2*10.76391041671;
-}
-function stats(){
-  if(!current)return;
-  const drawn=manual.length>0;
-  el('sqft').textContent=f(drawn?manual.reduce((s,p)=>s+p.area,0):current.sqft);
-  el('scope').textContent=drawn?'Manually outlined lawn polygons':current.scope==='matched-parcel'?'Parcel matched • approximate grass':current.scope==='user-drawn'?'Custom property boundary • approximate grass':'Unverified search zone • NOT property-specific';
-  el('boundarySize').textContent='Boundary / search area: '+f(current.scope_sqft)+' sq ft';
-  el('notice').textContent=(drawn?'This result uses your manual lawn polygons. ':'' )+(current.warnings||[]).join(' ');
-  if(overlay){if(drawn && map.hasLayer(overlay))map.removeLayer(overlay);else if(!drawn && !map.hasLayer(overlay))overlay.addTo(map)}
-}
-function drawResult(result){
-  current=result;
-  for(const layer of [photo,overlay,line])if(layer)map.removeLayer(layer);
-  photo=L.imageOverlay(result.aerial_image,result.bounds).addTo(map);
-  overlay=L.imageOverlay(result.grass_overlay,result.bounds).addTo(map);
-  line=L.geoJSON(result.boundary,{style:{color:result.scope==='search-zone'?'#ffdf81':'#b4edff',weight:3,fillOpacity:.02,dashArray:result.scope==='search-zone'?'6 7':null}}).addTo(map);
-  map.fitBounds(result.bounds,{padding:[20,20]});el('mapTitle').textContent=result.address;
-  el('empty').style.display='none';stats();setTimeout(()=>map.invalidateSize(),60);
-}
-async function measure(){
-  if(running)return;
-  const address=el('address').value.trim();if(!address)return;
-  el('error').textContent='';setBusy(true);
-  try{
-    const payload={address,sensitivity:Number(el('sens').value),radius_m:Number(el('radius').value)};
-    if(custom)payload.custom_boundary=custom;
-    const r=await fetch('/api/measure',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    const data=await r.json();if(!r.ok)throw new Error(data.error||'Measurement unavailable');
-    manual=[];manualGroup.clearLayers();drawResult(data);
-  }catch(e){el('error').textContent=e.message||'An error occurred.'}
-  finally{setBusy(false)}
-}
-el('form').addEventListener('submit',e=>{e.preventDefault();custom=null;manual=[];manualGroup.clearLayers();measure()});
-el('sens').addEventListener('input',()=>el('sensLabel').textContent=el('sens').value);
-el('radius').addEventListener('input',()=>el('radiusLabel').textContent=el('radius').value+' m');
-el('redo').addEventListener('click',measure);
-el('boundaryBtn').addEventListener('click',()=>{drawMode='boundary';new L.Draw.Polygon(map,{allowIntersection:false,shapeOptions:{color:'#b4edff'}}).enable()});
-el('lawnBtn').addEventListener('click',()=>{drawMode='lawn';new L.Draw.Polygon(map,{allowIntersection:false,shapeOptions:{color:'#f3e483'}}).enable()});
-map.on(L.Draw.Event.CREATED,async e=>{
-  let mode=drawMode;drawMode=null;
-  if(mode==='boundary'){custom=e.layer.toGeoJSON().geometry;await measure()}
-  else if(mode==='lawn'){let area=manualArea(e.layer.getLatLngs()[0]);e.layer.setStyle({color:'#f3e483',fillOpacity:.22});e.layer.bindTooltip(f(area)+' sq ft');manualGroup.addLayer(e.layer);manual.push({area,layer:e.layer});stats()}
-});
-el('resetBtn').addEventListener('click',async()=>{
-  manual=[];manualGroup.clearLayers();
-  if(custom){custom=null;await measure()}else stats();
-});
-</script>
-</body>
-</html>
+<section class="card"><h2>2. Aerial property view</h2><div class="map-btns"><button id="drawLawn" class="primary" disabled>+ Draw lawn</button><button id="drawExclude" disabled>− Exclude house / driveway</button><button id="undo" disabled>Undo last shape</button><button id="refresh" disabled>Refresh view</button></div><div class="map-wrap"><div id="map"></div></div><p class="hint">Aerial imagery: USDA/USGS NAIP via The National Map. Zoom or pan to inspect the property. Manual boundaries are approximate, not surveyed.</p></section>
+<section class="card"><h2>3. Services & quote</h2><div class="row"><input id="newService" placeholder="New service name"><button id="addService">Add</button></div><p class="hint">Check services to include in the quote. Enter a rate per 1,000 sq ft and an optional minimum charge.</p><div id="services"></div><h3>Customer details</h3><label>Customer name</label><input id="customerName" placeholder="Customer name"><label>Customer email</label><input id="customerEmail" type="email" placeholder="customer@example.com"><label>Quote notes</label><textarea id="notes" rows="3" placeholder="Services, schedule or estimate notes"></textarea><hr style="border:none;border-top:1px solid #e1e8e1;margin:18px 0"><div class="hint">Total estimated selected services</div><div id="total" class="total">$0.00</div><button class="primary" id="send" style="width:100%;margin:12px 0">Email customer + business owner</button><button id="copy" style="width:100%">Copy estimate text</button><p id="emailStatus" class="status"></p><p class="hint">Email delivery requires a verified sending domain and Resend API key on the app server. Without this setup, copy the estimate instead. Email sends only when you press the button.</p></section>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script><script>
+const $=id=>document.getElementById(id),fmt=n=>Math.round(n).toLocaleString('en-US'),usd=n=>'$'+Number(n).toFixed(2);
+const map=L.map('map',{zoomControl:true}).setView([39.02,-84.61],16);let origin=null,aerialLayer=null,shapes=[],sqft=0,mode='area',loading=false;
+let services=JSON.parse(localStorage.getItem('lq_services')||'null')||[{id:1,name:'Mowing',rate:25,minimum:40,selected:true},{id:2,name:'Fertilization',rate:12,minimum:0,selected:false},{id:3,name:'Weed Control',rate:15,minimum:0,selected:false}];
+for(const [id,key] of [['company','company'],['owner','owner'],['phone','phone']]){$(id).value=localStorage.getItem('lq_'+key)||'';$(id).addEventListener('input',()=>localStorage.setItem('lq_'+key,$(id).value))}
+async function api(url,opts){const r=await fetch(url,opts);let data=await r.json();if(!r.ok)throw Error(data.error||'Request failed');return data}
+const post=(url,body)=>api(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+async function status(){try{let s=await api('/api/status');$('lock').classList.toggle('hidden',s.authenticated);if(!s.email_configured)$('emailStatus').textContent='Automatic email not configured yet. You can copy quotes.'}catch(e){$('lockMsg').textContent=e.message}}
+$('login').onsubmit=async e=>{e.preventDefault();try{await post('/api/login',{code:$('code').value});$('code').value='';await status()}catch(ex){$('lockMsg').textContent=ex.message}};
+$('logout').onclick=async()=>{await post('/api/logout',{});await status()};
+function saveServices(){localStorage.setItem('lq_services',JSON.stringify(services));renderServices()}
+function payload(){return {address:$('address').value,areas:shapes.filter(s=>s.type==='area').map(s=>s.layer.toGeoJSON().geometry),exclusions:shapes.filter(s=>s.type==='exclude').map(s=>s.layer.toGeoJSON().geometry)}}
+async function updateArea(){try{let r=await post('/api/area',payload());sqft=r.area_sqft;$('area').textContent=fmt(sqft);$('areaExtra').textContent='Gross '+fmt(r.gross_sqft)+' sq ft • excluded '+fmt(r.excluded_sqft)+' sq ft';renderServices()}catch(ex){$('searchMsg').textContent=ex.message}}
+function renderServices(){const wrap=$('services');wrap.textContent='';let total=0;services.forEach((s,i)=>{let n=Math.max(s.minimum||0,sqft*s.rate/1000);if(s.selected)total+=n;
+let row=document.createElement('div');row.className='service';
+let l=document.createElement('label');l.className='row';l.style.margin='0';let check=document.createElement('input');check.type='checkbox';check.checked=!!s.selected;check.onchange=()=>{s.selected=check.checked;saveServices()};let name=document.createElement('span');name.className='name';name.textContent=s.name;l.append(check,name);row.append(l);
+let fields=document.createElement('div');fields.className='row';fields.style.marginTop='8px';
+for(let [field,title] of [['rate','$/1,000'],['minimum','Min $']]){let group=document.createElement('div');let label=document.createElement('label');label.textContent=title;let input=document.createElement('input');input.type='number';input.min='0';input.max='100000';input.step='.01';input.value=s[field];input.oninput=()=>{s[field]=Math.max(0,Number(input.value)||0);localStorage.setItem('lq_services',JSON.stringify(services));refreshTotal()};group.append(label,input);fields.append(group)}
+let remove=document.createElement('button');remove.textContent='Remove';remove.style.alignSelf='end';remove.onclick=()=>{services.splice(i,1);saveServices()};fields.append(remove);row.append(fields);
+let amount=document.createElement('small');amount.className='hint';amount.textContent='Estimated: '+usd(n);row.append(amount);wrap.append(row)});$('total').textContent=usd(total)}
+function refreshTotal(){renderServices()}
+$('addService').onclick=()=>{const name=$('newService').value.trim();if(!name)return;services.push({id:Date.now(),name:name.slice(0,80),rate:0,minimum:0,selected:true});$('newService').value='';saveServices()};
+$('searchForm').onsubmit=async e=>{e.preventDefault();$('searchMsg').textContent='Locating property…';try{const d=await api('/api/address?q='+encodeURIComponent($('address').value.trim()));origin=d;$('address').value=d.address;map.setView([d.lat,d.lon],19);await loadAerial();$('searchMsg').textContent='Property located. Draw your lawn area in green.';for(let id of ['drawLawn','drawExclude','undo','refresh'])$(id).disabled=false}catch(ex){$('searchMsg').textContent=ex.message}};
+function radiusForZoom(){const z=map.getZoom();return Math.max(25,Math.min(600,110*Math.pow(2,19-z)))}
+async function loadAerial(){if(!origin||loading)return;loading=true;try{let radius=radiusForZoom();let bounds=calcBounds(origin.lat,origin.lon,radius);let url='/api/aerial?lat='+origin.lat+'&lon='+origin.lon+'&radius='+radius+'&t='+Date.now();let response=await fetch(url);if(!response.ok){let e=await response.json();throw Error(e.error)}let blob=await response.blob();let objectUrl=URL.createObjectURL(blob);if(aerialLayer){const old=aerialLayer._url;map.removeLayer(aerialLayer);if(old&&old.startsWith('blob:'))URL.revokeObjectURL(old)}aerialLayer=L.imageOverlay(objectUrl,bounds).addTo(map);aerialLayer.bringToBack();map.fitBounds(bounds,{animate:false,padding:[25,25]})}catch(ex){$('searchMsg').textContent=ex.message}finally{loading=false}}
+function calcBounds(lat,lon,r){let R=6378137, x=R*lon*Math.PI/180,y=R*Math.log(Math.tan(Math.PI/4+lat*Math.PI/360)),h=r/Math.cos(lat*Math.PI/180);const ll=(x,y)=>[ (2*Math.atan(Math.exp(y/R))-Math.PI/2)*180/Math.PI,(x/R)*180/Math.PI];return [ll(x-h,y-h),ll(x+h,y+h)]}
+$('refresh').onclick=loadAerial;
+function enableDraw(type){mode=type;new L.Draw.Polygon(map,{allowIntersection:false,shapeOptions:{color:type==='area'?'#3deb89':'#ff6e5e',weight:3}}).enable()}
+$('drawLawn').onclick=()=>enableDraw('area');$('drawExclude').onclick=()=>enableDraw('exclude');
+map.on(L.Draw.Event.CREATED,e=>{let type=mode;e.layer.setStyle({color:type==='area'?'#3deb89':'#ff6e5e',fillOpacity:.22});e.layer.addTo(map);shapes.push({type,layer:e.layer});updateArea()});
+$('undo').onclick=()=>{let x=shapes.pop();if(x)map.removeLayer(x.layer);updateArea()};
+$('clearDrawings').onclick=()=>{shapes.forEach(s=>map.removeLayer(s.layer));shapes=[];updateArea()};
+function selected(){return services.filter(s=>s.selected).map(s=>({name:s.name,rate:s.rate,minimum:s.minimum}))}
+function quoteText(){const rows=selected().map(s=>s.name+': '+usd(Math.max(s.minimum,s.rate*sqft/1000)));return [$('company').value||'LawnQuote','Property: '+$('address').value,'Customer: '+$('customerName').value,'Measured area: '+fmt(sqft)+' sq ft',...rows,'Total estimate: '+$('total').textContent,$('notes').value,'Approximate aerial measurements, subject to onsite verification.'].join('\n')}
+$('copy').onclick=async()=>{try{await navigator.clipboard.writeText(quoteText());$('emailStatus').textContent='Estimate copied.'}catch(e){$('emailStatus').textContent='Copy failed: '+e.message}};
+$('send').onclick=async()=>{if(!sqft){$('emailStatus').textContent='Draw the lawn first.';return}if(!selected().length){$('emailStatus').textContent='Select a service.';return}let ok=confirm('Send the estimate to both the customer and the business owner now?');if(!ok)return;
+$('emailStatus').textContent='Sending…';try{let d=await post('/api/send',{...payload(),company:$('company').value,owner_email:$('owner').value,phone:$('phone').value,customer_name:$('customerName').value,customer_email:$('customerEmail').value,services:selected(),notes:$('notes').value});$('emailStatus').textContent=d.message+' Customer: '+(d.results.customer.accepted?'accepted':'failed')+'; Business owner: '+(d.results.owner.accepted?'accepted':'failed')}catch(ex){$('emailStatus').textContent=ex.message}};
+renderServices();status();
+</script></body></html>
