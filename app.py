@@ -26,12 +26,28 @@ def authorized(fn):
   return fn(*args,**kwargs)
  return wrapped
 def configured():return bool(os.getenv("RESEND_API_KEY") and os.getenv("RESEND_FROM_EMAIL"))
+def public_satellite_token():
+ token=os.getenv("MAPBOX_PUBLIC_TOKEN","").strip()
+ # Mapbox public tokens are designed for browser delivery. Never expose secret tokens.
+ if token.startswith("pk.") and len(token)<600:return token
+ return ""
 @app.get("/")
 def home():return send_from_directory("static","index.html")
 @app.get("/health")
 def health():return jsonify(ok=True,product="LawnQuote Owner")
 @app.get("/api/status")
-def status():return jsonify(authenticated=bool(session.get("owner")),email_configured=configured())
+def status():return jsonify(authenticated=bool(session.get("owner")),
+  email_configured=configured(),satellite_configured=bool(public_satellite_token()))
+@app.get("/api/map-config")
+@authorized
+def map_config():
+ response=jsonify(provider="mapbox" if public_satellite_token() else "government_fallback",
+                  public_token=public_satellite_token(),
+                  provider_configured=bool(public_satellite_token()),
+                  max_zoom=21)
+ response.headers["Cache-Control"]="private,no-store"
+ return response
+
 @app.post("/api/login")
 def login():
  code=os.getenv("OWNER_ACCESS_CODE")
@@ -80,7 +96,7 @@ def address():
 def aerial():
  try:
   lat=number(request.args.get("lat"),18,72,"latitude")
-  lon=number(request.args.get("lon"),-170,-60,"longitude")
+  lon=number(request.args.get("lon"),-180,180,"longitude")
   radius=number(request.args.get("radius",90),25,600,"view radius")
  except ValueError as e:return err(str(e))
  box=bounding(lat,lon,radius)
@@ -119,7 +135,7 @@ def parse_shapes(data,field):
   if p.geom_type!="Polygon" or not p.is_valid or len(p.exterior.coords)>500:
    raise ValueError("Invalid polygon. Avoid self-crossing lines.")
   for lon,lat in p.exterior.coords:
-   if not (-170<lon<-60 and 18<lat<72):
+   if not (-180<=lon<=180 and 18<lat<72):
     raise ValueError("Outline coordinates outside supported region.")
   polys.append(p)
  return polys
