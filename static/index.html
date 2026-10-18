@@ -10,7 +10,14 @@
 <button id="clearDrawings" style="background:#ffe8e3;color:#9b3022">✕ Clear all drawings &amp; reset area</button>
 <h3>Business profile</h3><label>Company name</label><input id="company" placeholder="Your lawn care business"><label>Business owner's email</label><input id="owner" type="email" placeholder="owner@business.com"><label>Business phone</label><input id="phone" placeholder="Business phone"><p class="hint">Business profile and rates are saved in this browser only, not shared with other devices.</p>
 </section>
-<section class="card"><h2>2. Aerial property view</h2><div class="map-btns"><button id="drawLawn" class="primary" disabled>+ Draw lawn</button><button id="drawExclude" disabled>− Exclude house / driveway</button><button id="finishDraw" disabled style="background:#156a3d;color:white">✓ Finish drawing</button><button id="cancelDraw" disabled>Cancel drawing</button><button id="undo" disabled>Undo last shape</button><button id="refresh" disabled>Refresh view</button></div><p id="drawingHint" role="status" class="hint" style="padding:9px 11px;background:#eaf4ec;border-radius:8px">Find an address, then select Draw lawn to begin.</p><div class="map-wrap"><div id="map"></div></div><p class="hint">Kentucky: KyFromAbove 2022–2024 statewide 3-inch aerial imagery (zoom up to 21). Elsewhere: USGS / USDA aerial imagery, with varying clarity. Use the map layer selector to change sources. Drawn areas are estimates, not surveys.</p></section>
+<section class="card"><h2>2. Aerial property view</h2><div class="map-btns"><button id="drawLawn" class="primary" disabled>+ Draw lawn</button><button id="drawExclude" disabled>− Exclude house / driveway</button><button id="finishDraw" disabled style="background:#156a3d;color:white">✓ Finish drawing</button><button id="cancelDraw" disabled>Cancel drawing</button><button id="undo" disabled>Undo last shape</button><button id="refresh" disabled>Refresh view</button></div><p id="drawingHint" role="status" class="hint" style="padding:9px 11px;background:#eaf4ec;border-radius:8px">Find an address, then select Draw lawn to begin.</p><div class="map-wrap"><div id="map"></div><a id="mapboxWordmark" href="https://www.mapbox.com/about/maps/" rel="noopener noreferrer" target="_blank" style="display:none;position:absolute;bottom:26px;left:12px;z-index:500;background:white;color:#1a2b3d;padding:2px 8px;border-radius:4px;font-size:12px;text-decoration:none;font-weight:800">Mapbox</a></div>
+<p id="imageryStatus" class="hint" role="status" aria-live="polite" style="background:#e7f6e9;padding:10px;border-radius:9px;margin:12px 0">Loading map provider settings…</p>
+<details style="border:1px solid #dee9dd;padding:10px;border-radius:9px;margin-top:10px">
+ <summary style="font-weight:700;font-size:13px;cursor:pointer">Activate nationwide high-resolution satellite imagery</summary>
+ <p class="hint">The app supports Mapbox Satellite in all 50 states. To enable it, create a billing-enabled Mapbox account at <a href="https://account.mapbox.com/" target="_blank" rel="noopener">Mapbox</a>. Create a <strong>new public</strong> access token (<code>pk.</code>) with the required tile-read scopes, restricted to <code>lawnquote-owner-tool.onrender.com</code>.</p>
+ <p class="hint">In <a href="https://dashboard.render.com/web/srv-dba20i6q1p3s73a0r7sg" target="_blank" rel="noopener">Render → LawnQuote Owner → Environment</a>, create <code>MAPBOX_PUBLIC_TOKEN</code> and put your <code>pk.</code> token as its value. Save and redeploy the app. Do not put the token in GitHub. Review Mapbox pricing, attribution, and commercial imagery/tracing licensing before public rollout.</p>
+ <p class="hint">Once configured, the nationwide layer is automatically preferred. You can still choose a Kentucky high-resolution layer or USGS imagery from the map's layer selector.</p>
+</details><p class="hint">Nationwide: Mapbox Satellite (once configured) supports all 50 states, with location-dependent detail. Kentucky backup: 2022–2024 KyFromAbove. Other areas: USGS aerial fallback. Aerial photos can be older than today's property conditions; always verify before quoting. Drawn areas are estimates, not surveys.</p></section>
 <section class="card"><h2>3. Services & quote</h2><div class="row"><input id="newService" placeholder="New service name"><button id="addService">Add</button></div><p class="hint">Check services to include in the quote. Enter a rate per 1,000 sq ft and an optional minimum charge.</p><div id="services"></div><h3>Customer details</h3><label>Customer name</label><input id="customerName" placeholder="Customer name"><label>Customer email</label><input id="customerEmail" type="email" placeholder="customer@example.com"><label>Quote notes</label><textarea id="notes" rows="3" placeholder="Services, schedule or estimate notes"></textarea><hr style="border:none;border-top:1px solid #e1e8e1;margin:18px 0"><div class="hint">Total estimated selected services</div><div id="total" class="total">$0.00</div><button class="primary" id="send" style="width:100%;margin:12px 0">Open email app — customer + owner CC</button><button id="copy" style="width:100%">Copy estimate text</button><p id="emailStatus" class="status" role="status" aria-live="polite"></p>
 <details id="emailSetup" style="margin-top:12px;padding:12px;background:#f0f6ef;border-radius:9px">
   <summary style="cursor:pointer;font-weight:700;font-size:13px">Enable hands-free email delivery</summary>
@@ -64,19 +71,29 @@ function isKentuckyAddress(d){
   d.lat>=36.3 && d.lat<=39.45 && d.lon>=-89.7 && d.lon<=-81.7;
 }
 function chooseImagery(d){
- if(aerialLayer){map.removeLayer(aerialLayer);if(aerialLayer._url?.startsWith('blob:'))URL.revokeObjectURL(aerialLayer._url);aerialLayer=null}
+ if(aerialLayer){
+  map.removeLayer(aerialLayer);
+  if(aerialLayer._url&&aerialLayer._url.startsWith('blob:'))URL.revokeObjectURL(aerialLayer._url);
+  aerialLayer=null;
+ }
+ if(nationwideTiles){
+  if(aerialController)aerialController.abort();
+  nationwideTileLoads=0;nationwideTileErrors=0;
+  switchBaseLayer(nationwideTiles);
+  updateImageryLabel('Using nationwide Mapbox Satellite imagery; resolution depends on the address.');
+  return 'nationwide';
+ }
  if(isKentuckyAddress(d)){
   if(aerialController)aerialController.abort();
-  if(map.hasLayer(streets))map.removeLayer(streets);
-  if(map.hasLayer(usgsTiles))map.removeLayer(usgsTiles);
   kyTileSuccess=0;kyTileErrors=0;
+  switchBaseLayer(kyAerial);
   if(map.hasLayer(kyAerial))kyAerial.redraw();
-  else kyAerial.addTo(map);
-  return true;
+  updateImageryLabel('Using Kentucky KyFromAbove 3-inch imagery.');
+  return 'kentucky';
  }
- if(map.hasLayer(kyAerial))map.removeLayer(kyAerial);
- if(!map.hasLayer(usgsTiles) && !map.hasLayer(streets))usgsTiles.addTo(map);
- return false;
+ switchBaseLayer(usgsTiles);
+ updateImageryLabel('USGS national imagery — quality varies. Activate Mapbox Satellite for broader, sharper imagery.');
+ return 'usgs';
 }
 let usgsLoaded=false,tileFailures=0;
 usgsTiles.on('tileload',()=>{usgsLoaded=true;tileFailures=0});
@@ -85,7 +102,59 @@ usgsTiles.on('tileerror',()=>{
  map.removeLayer(usgsTiles);streets.addTo(map);
  $('searchMsg').textContent='Aerial map tiles could not load. Switched to streets. Use the map layer selector to retry aerial.';
 });
-let origin=null,aerialLayer=null,shapes=[],sqft=0,mode='area',loading=false,activeDraw=null,areaRequestId=0,emailConfigured=false,aerialController=null;const drawingLayers=L.featureGroup().addTo(map);
+let origin=null,aerialLayer=null,shapes=[],sqft=0,mode='area',loading=false,activeDraw=null,areaRequestId=0,emailConfigured=false,aerialController=null;
+let nationwideTiles=null,nationwideConfigured=false,nationwideTileLoads=0,nationwideTileErrors=0;
+const drawingLayers=L.featureGroup().addTo(map);
+function mapLayerSelected(layer){return map.hasLayer(layer)}
+function switchBaseLayer(layer){
+ for(const other of [nationwideTiles,kyAerial,usgsTiles,streets]){
+  if(other && other!==layer && map.hasLayer(other))map.removeLayer(other);
+ }
+ if(!map.hasLayer(layer))layer.addTo(map);
+ if($('mapboxWordmark'))$('mapboxWordmark').style.display=layer===nationwideTiles?'block':'none';
+}
+function updateImageryLabel(message){
+ if($('imageryStatus'))$('imageryStatus').textContent=message;
+}
+function nationalMapLoaded(){
+ nationwideTileLoads++;
+ if(nationwideTileLoads===1){
+  updateImageryLabel('Nationwide Mapbox Satellite imagery loaded. Sharpness depends on local photo coverage.');
+  $('searchMsg').textContent='Satellite imagery loaded. Draw the area you want to price.';
+ }
+}
+function nationalMapError(){
+ if(!nationwideTiles||!mapLayerSelected(nationwideTiles))return;
+ if(nationwideTileLoads>0||++nationwideTileErrors<8)return;
+ if(origin && isKentuckyAddress(origin)){
+  switchBaseLayer(kyAerial);
+  updateImageryLabel('Mapbox tiles unavailable here; using Kentucky high-resolution aerial imagery.');
+ }else{
+  switchBaseLayer(usgsTiles);
+  updateImageryLabel('Mapbox tiles unavailable for this view or token. Switched to USGS; zoom detail may be limited.');
+ }
+ $('searchMsg').textContent='Nationwide imagery unavailable at this location or token. A fallback map is shown.';
+}
+async function configureNationwideImagery(){
+ if(nationwideConfigured)return;
+ const data=await api('/api/map-config');
+ nationwideConfigured=true;
+ if(!data.provider_configured||!/^pk\\./.test(data.public_token||'')){
+  updateImageryLabel('National high-resolution imagery needs a Mapbox public token. The government imagery backup remains available.');
+  return;
+ }
+ const token=encodeURIComponent(data.public_token);
+ nationwideTiles=L.tileLayer('https://api.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}@2x.jpg90?access_token='+token,{
+  maxZoom:21,maxNativeZoom:21,tileSize:256,
+  attribution:'Imagery &copy; <a href="https://www.mapbox.com/about/maps/" target="_blank" rel="noopener">Mapbox</a>; Map data &copy; OpenStreetMap'
+ });
+ nationwideTiles.on('tileload',nationalMapLoaded);
+ nationwideTiles.on('tileerror',nationalMapError);
+ imageryControl.addBaseLayer(nationwideTiles,'Nationwide satellite (Mapbox)');
+ switchBaseLayer(nationwideTiles);
+ updateImageryLabel('Nationwide Mapbox Satellite enabled. Coverage includes all U.S. states; detail varies by property.');
+ if(origin)chooseImagery(origin);
+}
 let services=JSON.parse(localStorage.getItem('lq_services')||'null')||[{id:1,name:'Mowing',rate:25,minimum:40,selected:true},{id:2,name:'Fertilization',rate:12,minimum:0,selected:false},{id:3,name:'Weed Control',rate:15,minimum:0,selected:false}];
 for(const [id,key] of [['company','company'],['owner','owner'],['phone','phone']]){$(id).value=localStorage.getItem('lq_'+key)||'';$(id).addEventListener('input',()=>localStorage.setItem('lq_'+key,$(id).value))}
 async function api(url,opts){const r=await fetch(url,opts);let data=await r.json();if(!r.ok)throw Error(data.error||'Request failed');return data}
@@ -95,6 +164,9 @@ async function status(){
   let s=await api('/api/status');
   $('lock').classList.toggle('hidden',s.authenticated);
   emailConfigured=!!s.email_configured;
+  if(s.authenticated){
+   configureNationwideImagery().catch(e=>updateImageryLabel('Map configuration could not load: '+e.message));
+  }
   $('send').textContent=emailConfigured?'Automatically email customer + business owner':'Open email app — customer + owner CC';
   $('emailStatus').textContent=emailConfigured?
    'Automatic delivery is configured. Check the recipient addresses, then press Email.':
@@ -143,13 +215,15 @@ $('searchForm').onsubmit=async e=>{
   const d=await api('/api/address?q='+encodeURIComponent($('address').value.trim()));
   cancelActive();clearCompleted();origin=d;$('address').value=d.address;
   map.invalidateSize();map.setView([d.lat,d.lon],19);
-  const highRes=chooseImagery(d);
-  $('searchMsg').textContent=highRes?
-   'Property located. Loading Kentucky 3-inch aerial photography (2022–2024)…':
-   'Property located. USGS aerial map is lower resolution here; checking for sharper imagery…';
+  const mapSource=chooseImagery(d);
+  $('searchMsg').textContent=mapSource==='nationwide'?
+   'Property located. Loading nationwide Mapbox satellite photography…':
+   mapSource==='kentucky'?
+    'Property located. Loading Kentucky high-resolution aerial photography…':
+    'Property located. USGS map can be blurry in some areas; checking for a better aerial photo…';
   $('drawingHint').textContent='Tap Draw lawn, mark 3+ corners, then Finish drawing. Zoom in to outline buildings and grass accurately.';
   for(const id of ['drawLawn','drawExclude','undo','refresh'])$(id).disabled=false;
-  if(!highRes)loadAerial();
+  if(mapSource==='usgs')loadAerial();
  }catch(ex){$('searchMsg').textContent=ex.message}
 };
 function radiusForZoom(){const z=map.getZoom();return Math.max(25,Math.min(600,110*Math.pow(2,19-z)))}
@@ -193,6 +267,12 @@ async function loadAerial(){
 }
 function calcBounds(lat,lon,r){let R=6378137, x=R*lon*Math.PI/180,y=R*Math.log(Math.tan(Math.PI/4+lat*Math.PI/360)),h=r/Math.cos(lat*Math.PI/180);const ll=(x,y)=>[ (2*Math.atan(Math.exp(y/R))-Math.PI/2)*180/Math.PI,(x/R)*180/Math.PI];return [ll(x-h,y-h),ll(x+h,y+h)]}
 $('refresh').onclick=()=>{
+ if(nationwideTiles && origin){
+  nationwideTileLoads=0;nationwideTileErrors=0;
+  switchBaseLayer(nationwideTiles);nationwideTiles.redraw();
+  updateImageryLabel('Refreshing nationwide satellite map tiles…');
+  return;
+ }
  if(origin && isKentuckyAddress(origin)){
   kyTileSuccess=0;kyTileErrors=0;
   if(aerialLayer){map.removeLayer(aerialLayer);aerialLayer=null}
