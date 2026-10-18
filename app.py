@@ -77,18 +77,72 @@ def unmerc(x,y):
 def bounding(lat,lon,radius):
  x,y=merc(lon,lat); half=radius/max(.2,math.cos(math.radians(lat)))
  return (x-half,y-half,x+half,y+half)
+def rooftop_geocode(address, census_lat, census_lon):
+ # World Geocoding returns display points for PointAddress matches when available.
+ # It requires geocoding privileges. A separate server-side key is preferred.
+ # Do not store provider results: forStorage=false; each search is a new request.
+ token=(os.getenv("ARCGIS_GEOCODING_API_KEY") or
+        os.getenv("ARCGIS_API_KEY") or "").strip()
+ if not token:return None
+ endpoint="https://geocode-api.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates"
+ params={"SingleLine":address,"sourceCountry":"USA","outFields":"Addr_type,AddNum,Match_addr,DisplayX,DisplayY",
+         "locationType":"rooftop","outSR":4326,"maxLocations":4,
+         "forStorage":"false","f":"json","token":token}
+ try:
+  r=http.get(endpoint,params=params,headers={"Referer":"https://lawnquote-owner-tool.onrender.com/"},timeout=(4,8))
+  r.raise_for_status()
+  data=r.json()
+  if data.get("error"):
+   logging.warning("ArcGIS geocoder unavailable: provider rejected request")
+   return None
+  number_match=re.match(r"^\\s*(\\d+[A-Za-z]?)\\b",address)
+  requested_house=number_match.group(1).upper() if number_match else None
+  for candidate in data.get("candidates",[]):
+   attrs=candidate.get("attributes") or {}
+   if attrs.get("Addr_type") not in ("PointAddress","Subaddress"):continue
+   if float(candidate.get("score",0))<93:continue
+   if requested_house:
+    matched_house=str(attrs.get("AddNum") or "").strip().upper()
+    if not matched_house:
+     matched_house_match=re.match(r"^\\s*(\\d+[A-Za-z]?)\\b",
+       str(attrs.get("Match_addr") or candidate.get("address") or ""))
+     matched_house=matched_house_match.group(1).upper() if matched_house_match else ""
+    if matched_house!=requested_house:continue
+   def coord(key,other):
+    try:return float(attrs[key])
+    except (TypeError,KeyError,ValueError):return float(candidate["location"][other])
+   lon=coord("DisplayX","x");lat=coord("DisplayY","y")
+   if not (-180<=lon<=180 and 18<=lat<=72):continue
+   # Prevent an unrelated high-score candidate across town.
+   meter_dist=math.hypot((lat-census_lat)*111000,
+                         (lon-census_lon)*111000*math.cos(math.radians(census_lat)))
+   if meter_dist>900:continue
+   return {"lat":lat,"lon":lon,"pin_accuracy":"address_point",
+           "pin_source":"ArcGIS address point",
+           "pin_note":"Building/parcel address-point match. Verify the blue pin against the roof; some points still represent an entrance or nearby location."}
+ except (requests.RequestException,KeyError,ValueError,TypeError):
+  logging.info("ArcGIS address-point lookup unavailable; using Census fallback")
+ return None
+
 @app.get("/api/address")
 @authorized
 def address():
  q=request.args.get("q","").strip()
  if not 8<=len(q)<=220:return err("Enter an address with street, city and state.")
  try:
-  r=http.get(CENSUS,params={"address":q,"benchmark":"Public_AR_Current","format":"json"},timeout=18)
+  r=http.get(CENSUS,params={"address":q,"benchmark":"Public_AR_Current","format":"json"},timeout=(4,18))
   r.raise_for_status()
   found=r.json().get("result",{}).get("addressMatches",[])
   if not found:return err("Address not found. Include city, state and ZIP.",404)
-  m=found[0];lat=float(m["coordinates"]["y"]);lon=float(m["coordinates"]["x"])
-  return jsonify(address=m.get("matchedAddress",q),lat=lat,lon=lon)
+  m=found[0]
+  lat=float(m["coordinates"]["y"]);lon=float(m["coordinates"]["x"])
+  result={"address":m.get("matchedAddress",q),"lat":lat,"lon":lon,
+          "pin_accuracy":"approximate","pin_source":"U.S. Census geocoder",
+          "pin_note":"Approximate street-address location; this is not a verified rooftop point. Tap Place pin on roof to correct it."}
+  improved=rooftop_geocode(result["address"],lat,lon)
+  if improved:result.update(improved)
+  response=jsonify(result);response.headers["Cache-Control"]="private,no-store"
+  return response
  except (requests.RequestException,KeyError,ValueError,TypeError):
   return err("Address search unavailable. Try again.",502)
 @app.get("/api/aerial")
