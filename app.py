@@ -246,7 +246,9 @@ GOVERNMENT_IMAGERY={
     "https://gis.cookcountyil.gov/imagery/rest/services/CookOrtho2025/ImageServer/exportImage","image"),
  "IL_EAST_1":("Illinois state 2025 — 6-inch aerials",
     "https://data.isgs.illinois.edu/arcgis/rest/services/Imagery/IL_Blk1_East_2025/ImageServer/exportImage","image"),
- "FL_MARION":("Marion County Florida 2023 — county orthophotography",
+ "FL_MARION_2024":("Marion County FL 2024 — high-resolution county aerial photography",
+    "https://gis.marionfl.org/image/rest/services/Aerials/Aerial2024/ImageServer/exportImage","image"),
+ "FL_MARION":("Marion County FL 2023 — county aerial backup",
     "https://gis.marionfl.org/image/rest/services/Aerials/Aerials_2023/ImageServer/exportImage","image"),
  "FL_SW":("SW Florida Water Management District 2023 — 6-inch aerials",
     "https://www25.swfwmd.state.fl.us/arcgiswmis/rest/services/Imagery/Imagery_2023_NC/MapServer/export","map"),
@@ -266,7 +268,7 @@ def select_government_sources(state,lat,lon):
    chosen.append("IL_EAST_1")
  if state=="FL":
   if 28.94<=lat<=29.56 and -82.58<=lon<=-81.58:
-   chosen.append("FL_MARION")
+   chosen.extend(["FL_MARION_2024","FL_MARION"])
   if 25.7<=lat<=29.55 and -83.5<=lon<=-81.15:
    chosen.append("FL_SW")
  return chosen+["USGS_PLUS","USGS_NAIP"]
