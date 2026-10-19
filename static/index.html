@@ -308,6 +308,53 @@ $('togglePin').onclick=()=>{
  showPinStatus(housePinShown?'🏠 Pin visible. You may drag it onto the roof.':'House pin hidden to let you trace the property. Tap Show pin to restore it.');
 };
 const drawingLayers=L.featureGroup().addTo(map);
+let ohioCountyTrackerLoaded=false;
+$('ohioCoverage').addEventListener('toggle',async()=>{
+ if(!$('ohioCoverage').open||ohioCountyTrackerLoaded)return;
+ const area=$('ohioCountyRows');
+ area.textContent='Loading all 88 Ohio county records…';
+ try{
+  const info=await api('/api/ohio-counties');
+  const rows=info.county_rows||[];
+  if(rows.length!==88)throw Error('The Ohio county tracker is incomplete.');
+  area.replaceChildren();
+  const p=document.createElement('p');
+  p.className='hint';
+  p.textContent=rows.length+' Ohio counties tracked · statewide OSIP cache configured · '+
+   info.county_specific_sources_configured+' county-specific sources · '+
+   info.county_audits_completed+' fully audited counties.';
+  area.appendChild(p);
+  const table=document.createElement('table');
+  table.style.cssText='width:100%;border-collapse:collapse;font-size:12px';
+  const header=document.createElement('tr');
+  for(const name of ['County','FIPS','Selected imagery','Native pixel','Quality audit']){
+   const th=document.createElement('th');
+   th.textContent=name;th.style.cssText='text-align:left;padding:6px;border-bottom:1px solid #ccd8cf;white-space:nowrap';
+   header.appendChild(th);
+  }
+  table.appendChild(header);
+  for(const item of rows){
+   const tr=document.createElement('tr');
+   const values=[
+    item.county,
+    item.fips,
+    item.county_preferred_source==='OH_LICKING_2025'?'Licking 2025':
+    item.county_preferred_source==='OH_STARK_2025'?'Stark 2025':'Ohio OSIP statewide',
+    item.candidate_native_inches?item.candidate_native_inches+' in':'Varies / unknown',
+    item.county_completed?'Complete':'Pending'
+   ];
+   for(const value of values){
+    const td=document.createElement('td');
+    td.textContent=value;
+    td.style.cssText='padding:6px;border-bottom:1px solid #e5eae6';
+    tr.appendChild(td);
+   }
+   table.appendChild(tr);
+  }
+  area.appendChild(table);
+  ohioCountyTrackerLoaded=true;
+ }catch(e){area.textContent='Could not load county tracker: '+e.message}
+});
 function switchBaseLayer(layer){
  for(const other of [kyAerial,maAerial,ohAerial,starkAerial,usgsTiles,streets])if(other!==layer&&map.hasLayer(other))map.removeLayer(other);
  if(!map.hasLayer(layer))layer.addTo(map);
