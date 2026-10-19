@@ -317,7 +317,9 @@ def aerial():
    mimetype="image/png" if content.startswith(bytes.fromhex("89504e47")) else "image/jpeg"
    r=send_file(BytesIO(content),mimetype=mimetype)
    r.headers["Cache-Control"]="private,max-age=360"
-   r.headers["X-Imagery-Source"]=name
+   # HTTP response headers must be Latin-1/ASCII; the provider names contain
+   # em dashes, which Gunicorn rejected with HTTP 400 before serving the JPEG.
+   r.headers["X-Imagery-Source"]=name.replace(" — "," - ").encode("ascii","ignore").decode("ascii")
    r.headers["X-Imagery-Provider"]=provider_key
    r.headers["X-Imagery-Coverage"]="regional" if not provider_key.startswith("USGS") else "national"
    return r
