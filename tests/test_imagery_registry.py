@@ -33,7 +33,7 @@ class CatalogTests(unittest.TestCase):
     def test_public_coverage_not_falsely_complete(self):
         status=coverage_summary()
         self.assertEqual(status["county_audits_completed"],0)
-        self.assertEqual(status["states_with_curated_regional_sources"],7)
+        self.assertEqual(status["states_with_curated_regional_sources"],8)
 
     def test_blank_image_is_rejected(self):
         out=BytesIO()
