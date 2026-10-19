@@ -364,6 +364,8 @@ async function loadAerial(){
   });
   if(aerialLayer){const prev=aerialLayer._url;map.removeLayer(aerialLayer);if(prev&&prev.startsWith('blob:'))URL.revokeObjectURL(prev)}
   aerialLayer=next.addTo(map);
+  // Keep the image under editable lawn polygons and house pin.
+  next.bringToBack();
   updateAttribution(source);
   return true;
  }catch(ex){
