@@ -74,6 +74,10 @@ def select_government_sources(state,lat,lon,county_fips=""):
  county_fips=str(county_fips or "")
  chosen=list(COUNTY_OVERRIDE.get(county_fips,()))
  if state=="IL":
+  # If Census county lookup is down, retain a conservative Cook County
+  # approximate region for the previously supported Chicago-area addresses.
+  if not county_fips and 41.35<=lat<=42.25 and -88.4<=lon<=-87.45:
+   chosen.append("IL_COOK")
   # Approximate 2025 acquisition block boundaries based on service extents.
   # A missing/non-covered tile must fall back instead of being counted complete.
   block=1 if lat>=41.0 else 2 if lat>=40.0 else 3 if lat>=38.5 else 4
