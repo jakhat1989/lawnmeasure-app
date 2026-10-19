@@ -24,12 +24,18 @@
 <p id="pinStatus" role="status" class="hint" style="margin:0 0 12px;padding:9px;background:#ecf3ff;border-radius:8px">🏠 The searched home will get a house pin. A street-address result can be approximate; tap Place pin on roof for a correction that stays saved in this browser.</p><p id="drawingHint" role="status" class="hint" style="padding:9px 11px;background:#eaf4ec;border-radius:8px">Find an address, then select Draw lawn to begin.</p><div class="map-wrap"><div id="map"></div></div>
 <p id="imageryStatus" class="hint" role="status" aria-live="polite" style="background:#e7f6e9;padding:12px;border-radius:9px;margin:12px 0;font-weight:650">Kentucky 3-inch imagery, government regional aerials, and nationwide federal imagery. Search a property to see which source loads.</p>
 <p id="ohioImageMetadata" class="hint" role="status" aria-live="polite" style="display:none;padding:8px;background:#eef3fa;border-radius:8px">Checking Ohio OSIP photo year and native resolution…</p>
+<p id="indianaImageMetadata" class="hint" role="status" aria-live="polite" style="display:none;background:#eef4e9;padding:8px;border-radius:8px">Checking Indiana official imagery year and pixel resolution…</p>
+<details id="indianaCoverage" style="border:1px solid #dee9dd;padding:11px;border-radius:9px;margin:11px 0">
+ <summary style="font-weight:700;cursor:pointer">Indiana imagery tracker — all 92 counties</summary>
+ <p class="hint">Indiana IGIO current state imagery (2022–2025) is configured. 2026 three-inch datasets are publicly downloadable in 9 counties but are not yet displayed from an identified live map service. All county image-quality audits remain pending.</p>
+ <div id="indianaCountyRows" style="max-height:320px;overflow:auto">Sign in and open this section to see 92 county records.</div>
+</details>
 <details id="ohioCoverage" style="border:1px solid #dee9dd;padding:11px;border-radius:9px;margin:11px 0">
  <summary style="font-weight:700;cursor:pointer">Ohio imagery tracker — all 88 counties</summary>
  <p class="hint">Source registry for all counties. Statewide imagery is configured; each county's actual photograph year, native resolution, sample clarity, and usage rights still require verification.</p>
  <div id="ohioCountyRows" style="max-height:320px;overflow:auto">Open this section after signing in to load Ohio county status.</div>
 </details>
-<p class="hint">Curated public imagery currently includes Ohio (OSIP statewide 2018–2025 imagery, 2025 Licking County 3-inch and Stark County 6-inch alternatives), Kentucky (3-inch), Massachusetts (2025; 3-inch Cape Cod / 6-inch elsewhere), Maryland (3-inch in selected areas / 6-inch statewide), North Carolina (latest 6-inch), Illinois (Cook County and 2025 blocks, 6-inch), and selected Florida counties. All other states still use federal USDA/USGS imagery, which may be blurry at rooftop level. No Esri World Imagery or Mapbox subscription is used; public government services may run on ArcGIS Server software. <strong>No U.S. county is yet certified as fully audited for coverage, rights, and reliability.</strong></p>
+<p class="hint">Curated public imagery currently includes Indiana (official IGIO current 2022–2025 six-inch generally, some three-inch; 2026 three-inch downloadable in nine counties but not yet live in the image service), Ohio (OSIP statewide 2018–2025 imagery, 2025 Licking County 3-inch and Stark County 6-inch alternatives), Kentucky (3-inch), Massachusetts (2025; 3-inch Cape Cod / 6-inch elsewhere), Maryland (3-inch in selected areas / 6-inch statewide), North Carolina (latest 6-inch), Illinois (Cook County and 2025 blocks, 6-inch), and selected Florida counties. All other states still use federal USDA/USGS imagery, which may be blurry at rooftop level. No Esri World Imagery or Mapbox subscription is used; public government services may run on ArcGIS Server software. <strong>No U.S. county is yet certified as fully audited for coverage, rights, and reliability.</strong></p>
 <p class="hint">Photograph date, coverage, and commercial-reuse terms differ among providers. Confirm site conditions before issuing final quotes. Drawing area is approximate, not a property survey.</p></section>
 <section class="card"><h2>3. Services & quote</h2><div class="row"><input id="newService" placeholder="New service name"><button id="addService">Add</button></div><p class="hint">Check services to include in the quote. Enter a rate per 1,000 sq ft and an optional minimum charge.</p><div id="services"></div><h3>Customer details</h3><label>Customer name</label><input id="customerName" placeholder="Customer name"><label>Customer email</label><input id="customerEmail" type="email" placeholder="customer@example.com"><label>Quote notes</label><textarea id="notes" rows="3" placeholder="Services, schedule or estimate notes"></textarea><hr style="border:none;border-top:1px solid #e1e8e1;margin:18px 0"><div class="hint">Total estimated selected services</div><div id="total" class="total">$0.00</div><button class="primary" id="send" style="width:100%;margin:12px 0">Open email app — customer + owner CC</button><button id="copy" style="width:100%">Copy estimate text</button><p id="emailStatus" class="status" role="status" aria-live="polite"></p>
 <details id="emailSetup" style="margin-top:12px;padding:12px;background:#f0f6ef;border-radius:9px">
@@ -176,7 +182,11 @@ function chooseImagery(d){
   return 'massachusetts';
  }
  switchBaseLayer(usgsTiles);
- updateImageryLabel('Government imagery: searching for a sharper state/county aerial source. If none is available, federal USDA/USGS imagery will be used; it may be less detailed.');
+ if(stateOf(d)==='IN'){
+  const special=d.county_fips==='18057'?' (checking Hamilton County 2024 3-inch first)':
+   d.county_fips==='18081'?' (checking north Johnson County 2025 first)':'';
+  updateImageryLabel('Indiana IGIO official current 2022–2025 orthophotography, usually six-inch and sometimes three-inch'+special+'. 2026 downloaded three-inch COGs are not yet streamed here.');
+ }else updateImageryLabel('Government imagery: searching for a sharper state/county aerial source. If none is available, federal USDA/USGS imagery will be used; it may be less detailed.');
  return 'government';
 }
 let usgsLoaded=false,tileFailures=0;
@@ -309,6 +319,72 @@ $('togglePin').onclick=()=>{
  showPinStatus(housePinShown?'🏠 Pin visible. You may drag it onto the roof.':'House pin hidden to let you trace the property. Tap Show pin to restore it.');
 };
 const drawingLayers=L.featureGroup().addTo(map);
+async function updateIndianaMetadata(d){
+ const element=$('indianaImageMetadata');
+ if(stateOf(d)!=='IN'){element.style.display='none';return}
+ element.style.display='block';
+ element.textContent='Checking Indiana IGIO actual image year and native pixel size…';
+ try{
+  const response=await api('/api/indiana-imagery-point?lat='+encodeURIComponent(d.lat)+'&lon='+encodeURIComponent(d.lon));
+  if(!origin||origin.address!==d.address)return;
+  if(!response.found){
+   element.textContent=(response.message||'Indiana catalog details unavailable.')+
+    ' The 2026 3-inch files are not necessarily part of the displayed map.';
+   return;
+  }
+  element.textContent='Indiana IGIO catalog at this property: '+response.year+
+   ' imagery, published pixel size '+(response.pixel_size_as_published||'not stated')+
+   (response.county?' (county '+response.county+')':'')+
+   '. Verify photo clarity visually; this is not a 2026 release claim.';
+ }catch(e){
+  if(origin&&origin.address===d.address)
+   element.textContent='Indiana photo year/pixel lookup unavailable. The government aerial map may still work.';
+ }
+}
+let indianaTrackerLoaded=false;
+$('indianaCoverage').addEventListener('toggle',async()=>{
+ if(!$('indianaCoverage').open||indianaTrackerLoaded)return;
+ const area=$('indianaCountyRows');
+ area.textContent='Loading all 92 Indiana county records…';
+ try{
+  const info=await api('/api/indiana-counties');
+  const rows=info.county_rows||[];
+  if(rows.length!==92)throw Error('Indiana tracker returned an incomplete county list.');
+  area.replaceChildren();
+  const summary=document.createElement('p');summary.className='hint';
+  summary.textContent=rows.length+' counties tracked; '+info.local_streaming_source_count+
+   ' local service overrides; '+info.county_2026_three_inch_bulk_release_count+
+   ' released 2026 three-inch *downloads* (not activated as map tiles); '+
+   info.county_audits_completed+' counties fully quality-audited.';
+  area.appendChild(summary);
+  const table=document.createElement('table');
+  table.style.cssText='width:100%;border-collapse:collapse;font-size:12px';
+  const headings=document.createElement('tr');
+  for(const head of ['County','FIPS','Preferred live map','2026 3-inch file','Audit']){
+   const cell=document.createElement('th');cell.textContent=head;
+   cell.style.cssText='text-align:left;padding:6px;border-bottom:1px solid #cbd9ce;white-space:nowrap';
+   headings.appendChild(cell);
+  }
+  table.appendChild(headings);
+  for(const item of rows){
+   const tr=document.createElement('tr');
+   let source=item.preferred_streaming_source==='IN_HAMILTON_2024_3IN'?
+    'Hamilton 2024 / IGIO':item.preferred_streaming_source==='IN_JOHNSON_NORTH_2025'?
+    'Johnson North 2025 / IGIO':'IN current 2022–2025';
+   for(const val of [item.county,item.fips,source,
+      item.has_2026_three_inch_bulk_release?'Download only':'Not released',
+      item.county_completed?'Complete':'Pending']){
+    const cell=document.createElement('td');cell.textContent=val;
+    cell.style.cssText='padding:6px;border-bottom:1px solid #e6eae6';
+    tr.appendChild(cell);
+   }
+   table.appendChild(tr);
+  }
+  area.appendChild(table);
+  indianaTrackerLoaded=true;
+ }catch(e){area.textContent='Indiana county list could not load: '+e.message}
+});
+
 async function checkOhioImageMetadata(d){
  const info=$('ohioImageMetadata');
  if(stateOf(d)!=='OH'){info.style.display='none';return}
@@ -478,6 +554,8 @@ $('searchForm').onsubmit=async e=>{
   const mode=chooseImagery(d);
   if(stateOf(d)==='OH')checkOhioImageMetadata(d);
   else $('ohioImageMetadata').style.display='none';
+  if(stateOf(d)==='IN')updateIndianaMetadata(d);
+  else $('indianaImageMetadata').style.display='none';
   map.invalidateSize();map.setView(pinLocation,19);
   $('searchMsg').textContent=mode==='kentucky'?
    'Property found. Loading Kentucky 3-inch aerial tiles…':
