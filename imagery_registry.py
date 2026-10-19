@@ -1,0 +1,109 @@
+"""Curated public-orthophoto service catalog (2026-10-19).
+Adding a county requires an official published image service, not just a dataset.
+The catalog does not certify live availability, actual footprints, or reuse rights.
+Do not imply national three-inch coverage. Add state and county providers after review.
+"""
+STATE_CODES=frozenset(("AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME "
+ "MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN "
+ "TX UT VT VA WA WV WI WY DC").split())
+
+# Entries: display label, public image URL, service type, approximate native inch/pixel,
+# source vintage, publisher, documentation or authoritative service metadata URL.
+SOURCES={
+ "IL_COOK":("Cook County 2025 orthoimagery",
+  "https://gis.cookcountyil.gov/imagery/rest/services/CookOrtho2025/ImageServer/exportImage",
+  "image",6,"2025","Cook County GIS",
+  "https://gis.cookcountyil.gov/imagery/rest/services/CookOrtho2025/ImageServer/info/iteminfo"),
+ "FL_MARION_2024":("Marion County Florida 2024 aerial imagery",
+  "https://gis.marionfl.org/image/rest/services/Aerials/Aerial2024/ImageServer/exportImage",
+  "image",1.5,"2024","Marion County GIS",
+  "https://gis.marionfl.org/image/rest/services/Aerials/Aerial2024/ImageServer"),
+ "FL_MARION":("Marion County Florida 2023 imagery backup",
+  "https://gis.marionfl.org/image/rest/services/Aerials/Aerials_2023/ImageServer/exportImage",
+  "image",None,"2023","Marion County GIS",
+  "https://gis.marionfl.org/image/rest/services/Aerials/Aerials_2023/ImageServer"),
+ "FL_SW":("Southwest Florida water district 2023 orthophotos",
+  "https://www25.swfwmd.state.fl.us/arcgiswmis/rest/services/Imagery/Imagery_2023_NC/MapServer/export",
+  "map",6,"2023","Southwest Florida Water Management District",
+  "https://www25.swfwmd.state.fl.us/arcgiswmis/rest/services/Imagery/Imagery_2023_NC/MapServer"),
+ "MD_3IN":("Maryland current available 3-inch orthophotos",
+  "https://mdgeodata.md.gov/imagery/rest/services/ThreeInch/MD_ThreeInchImagery/ImageServer/exportImage",
+  "image",3,"2020–2025","Maryland iMAP",
+  "https://mdgeodata.md.gov/imagery/rest/services/ThreeInch/MD_ThreeInchImagery/ImageServer"),
+ "MD_6IN":("Maryland statewide 6-inch orthophotos",
+  "https://mdgeodata.md.gov/imagery/rest/services/SixInch/SixInchImagery/ImageServer/exportImage",
+  "image",6,"2023–2025","Maryland iMAP",
+  "https://mdgeodata.md.gov/imagery/rest/services/SixInch/SixInchImagery/ImageServer"),
+ "NC_LATEST":("North Carolina latest 6-inch statewide orthophotos",
+  "https://services.nconemap.gov/secure/rest/services/Imagery/Orthoimagery_Latest/ImageServer/exportImage",
+  "image",6,"varies by county","NC OneMap / NC 911 Board",
+  "https://services.nconemap.gov/secure/rest/services/Imagery/Orthoimagery_Latest/ImageServer"),
+ "USGS_PLUS":("USGS NAIP Plus national aerial photography",
+  "https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPPlus/ImageServer/exportImage",
+  "image",None,"varies by location","USGS / USDA",
+  "https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPPlus/ImageServer"),
+ "USGS_NAIP":("USGS NAIP national imagery fallback",
+  "https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer/exportImage",
+  "image",None,"varies by location","USGS / USDA",
+  "https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer"),
+}
+for block in range(1,5):
+ for side in ("East","West"):
+  key=f"IL_{block}_{side.upper()}"
+  path=f"Imagery/IL_Blk{block}_{side}_2025/ImageServer"
+  endpoint=f"https://data.isgs.illinois.edu/arcgis/rest/services/{path}"
+  SOURCES[key]=(f"Illinois 2025 block {block} {side.lower()} 6-inch orthophotos",
+    endpoint+"/exportImage","image",6,"2025","Illinois State Geological Survey",endpoint)
+
+COUNTY_OVERRIDE={
+ # FIPS from Census geographies API. County point bbox is used only when FIPS is unavailable.
+ "17031":("IL_COOK",),
+ "12083":("FL_MARION_2024","FL_MARION"),
+}
+
+STATE_SERVICES={
+ "MD":("MD_3IN","MD_6IN"),
+ "NC":("NC_LATEST",),
+}
+# Massachusetts 2025 public TILE cache is in frontend (3-inch Cape Cod; 6-inch elsewhere).
+# Kentucky's 2022-2024 3-inch TILE cache is in frontend.
+PUBLIC_TILE_STATES={"KY","MA"}
+
+def select_government_sources(state,lat,lon,county_fips=""):
+ state=str(state or "").upper()
+ county_fips=str(county_fips or "")
+ chosen=list(COUNTY_OVERRIDE.get(county_fips,()))
+ if state=="IL":
+  # Approximate 2025 acquisition block boundaries based on service extents.
+  # A missing/non-covered tile must fall back instead of being counted complete.
+  block=1 if lat>=41.0 else 2 if lat>=40.0 else 3 if lat>=38.5 else 4
+  side="EAST" if lon>-89.2 else "WEST"
+  counterpart="WEST" if side=="EAST" else "EAST"
+  # First preferred geographic block, then adjacent for edge/mosaic coverage.
+  for b in (block, max(1,block-1),min(4,block+1)):
+   for orientation in (side,counterpart):
+    key=f"IL_{b}_{orientation}"
+    if key not in chosen:chosen.append(key)
+ elif state=="FL" and not county_fips:
+  if 28.94<=lat<=29.56 and -82.58<=lon<=-81.58:
+   chosen.extend(("FL_MARION_2024","FL_MARION"))
+ if state=="FL" and 25.7<=lat<=29.55 and -83.5<=lon<=-81.15:
+  chosen.append("FL_SW")
+ chosen.extend(STATE_SERVICES.get(state,()))
+ chosen.extend(("USGS_PLUS","USGS_NAIP"))
+ return list(dict.fromkeys(chosen))
+
+def coverage_summary():
+ # This shows registry progress only. It does not claim counties verified.
+ curated={"KY":"3-inch state tile service","MA":"2025 3/6-inch state tile service",
+   "MD":"partial 3-inch plus statewide 6-inch","NC":"statewide latest 6-inch",
+   "IL":"2025 regional 6-inch block services plus Cook County",
+   "FL":"selected county/district high-resolution services"}
+ return {
+  "states_total":len(STATE_CODES),
+  "states_with_curated_regional_sources":len(curated),
+  "curated_states":curated,
+  "states_using_national_fallback":sorted(STATE_CODES-set(curated)),
+  "county_audits_completed":0,
+  "disclaimer":"No state or county is certified complete without spot tests, service rights, footprint verification, and current imagery review."
+ }
