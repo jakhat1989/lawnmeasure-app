@@ -23,7 +23,12 @@
 <button id="centerPin" disabled>⌖ Find house pin</button><button id="placePin" disabled style="background:#d8e8ff;color:#1e4d94">⌖ Place pin on roof</button><button id="resetPin" disabled>Reset pin</button><button id="togglePin" disabled>Hide pin</button></div>
 <p id="pinStatus" role="status" class="hint" style="margin:0 0 12px;padding:9px;background:#ecf3ff;border-radius:8px">🏠 The searched home will get a house pin. A street-address result can be approximate; tap Place pin on roof for a correction that stays saved in this browser.</p><p id="drawingHint" role="status" class="hint" style="padding:9px 11px;background:#eaf4ec;border-radius:8px">Find an address, then select Draw lawn to begin.</p><div class="map-wrap"><div id="map"></div></div>
 <p id="imageryStatus" class="hint" role="status" aria-live="polite" style="background:#e7f6e9;padding:12px;border-radius:9px;margin:12px 0;font-weight:650">Kentucky 3-inch imagery, government regional aerials, and nationwide federal imagery. Search a property to see which source loads.</p>
-<p class="hint">Curated public imagery currently includes Kentucky (3-inch), Massachusetts (2025; 3-inch Cape Cod / 6-inch elsewhere), Maryland (3-inch in selected areas / 6-inch statewide), North Carolina (latest 6-inch), Illinois (Cook County and 2025 blocks, 6-inch), and selected Florida counties. All other states still use federal USDA/USGS imagery, which may be blurry at rooftop level. No Esri World Imagery or Mapbox subscription is used; public government services may run on ArcGIS Server software. <strong>No U.S. county is yet certified as fully audited for coverage, rights, and reliability.</strong></p>
+<details id="ohioCoverage" style="border:1px solid #dee9dd;padding:11px;border-radius:9px;margin:11px 0">
+ <summary style="font-weight:700;cursor:pointer">Ohio imagery tracker — all 88 counties</summary>
+ <p class="hint">Source registry for all counties. Statewide imagery is configured; each county's actual photograph year, native resolution, sample clarity, and usage rights still require verification.</p>
+ <div id="ohioCountyRows" style="max-height:320px;overflow:auto">Open this section after signing in to load Ohio county status.</div>
+</details>
+<p class="hint">Curated public imagery currently includes Ohio (OSIP statewide 2018–2025 imagery, 2025 Licking County 3-inch and Stark County 6-inch alternatives), Kentucky (3-inch), Massachusetts (2025; 3-inch Cape Cod / 6-inch elsewhere), Maryland (3-inch in selected areas / 6-inch statewide), North Carolina (latest 6-inch), Illinois (Cook County and 2025 blocks, 6-inch), and selected Florida counties. All other states still use federal USDA/USGS imagery, which may be blurry at rooftop level. No Esri World Imagery or Mapbox subscription is used; public government services may run on ArcGIS Server software. <strong>No U.S. county is yet certified as fully audited for coverage, rights, and reliability.</strong></p>
 <p class="hint">Photograph date, coverage, and commercial-reuse terms differ among providers. Confirm site conditions before issuing final quotes. Drawing area is approximate, not a property survey.</p></section>
 <section class="card"><h2>3. Services & quote</h2><div class="row"><input id="newService" placeholder="New service name"><button id="addService">Add</button></div><p class="hint">Check services to include in the quote. Enter a rate per 1,000 sq ft and an optional minimum charge.</p><div id="services"></div><h3>Customer details</h3><label>Customer name</label><input id="customerName" placeholder="Customer name"><label>Customer email</label><input id="customerEmail" type="email" placeholder="customer@example.com"><label>Quote notes</label><textarea id="notes" rows="3" placeholder="Services, schedule or estimate notes"></textarea><hr style="border:none;border-top:1px solid #e1e8e1;margin:18px 0"><div class="hint">Total estimated selected services</div><div id="total" class="total">$0.00</div><button class="primary" id="send" style="width:100%;margin:12px 0">Open email app — customer + owner CC</button><button id="copy" style="width:100%">Copy estimate text</button><p id="emailStatus" class="status" role="status" aria-live="polite"></p>
 <details id="emailSetup" style="margin-top:12px;padding:12px;background:#f0f6ef;border-radius:9px">
@@ -75,7 +80,44 @@ maAerial.on('tileerror',()=>{
  switchBaseLayer(usgsTiles);
  updateImageryLabel('MassGIS imagery unavailable at this address. Showing lower-resolution USGS aerial tiles.');
 });
+// Official statewide Ohio OSIP cache: 2018-2025 mixed-vintage/mixed-resolution imagery.
+// The tile service can render through z21; not every county has 3-inch source pixels.
+const ohAerial=L.tileLayer(
+ 'https://maps.ohio.gov/image/rest/services/osip_most_current_cache/MapServer/tile/{z}/{y}/{x}',{
+  maxNativeZoom:21,maxZoom:21,
+  bounds:L.latLngBounds([38.34,-84.98],[42.04,-80.44]),
+  attribution:'Ohio OSIP imagery &copy; Ohio OGRIP/DAS (mixed imagery vintages and native resolutions)'
+ });
+const starkAerial=L.tileLayer(
+ 'https://tiles.arcgis.com/tiles/1JiK2PayqrHvvJhM/arcgis/rest/services/Aerial_2025/MapServer/tile/{z}/{y}/{x}',{
+  maxNativeZoom:19,maxZoom:21,
+  bounds:L.latLngBounds([40.55,-81.75],[41.05,-81.03]),
+  attribution:'Stark County GIS / Ohio OSIP4, 2025 6-inch orthophotography'
+ });
+let ohioTilesLoaded=0,ohioTileFailures=0,starkTilesLoaded=0,starkTileFailures=0;
+ohAerial.on('tileload',()=>{
+ ohioTilesLoaded++;ohioTileFailures=0;
+ if(ohioTilesLoaded===1 && origin && stateOf(origin)==='OH')
+  updateImageryLabel('✓ Ohio OSIP statewide aerial imagery loaded. Source photos span 2018–2025 and resolution varies by property; 3-inch is not guaranteed.');
+});
+ohAerial.on('tileerror',()=>{
+ if(!map.hasLayer(ohAerial)||ohioTilesLoaded>0||++ohioTileFailures<8)return;
+ switchBaseLayer(usgsTiles);
+ updateImageryLabel('⚠️ Ohio OSIP aerial tiles did not load. USGS national aerial imagery shown instead; refresh to retry Ohio imagery.');
+});
+starkAerial.on('tileload',()=>{
+ starkTilesLoaded++;starkTileFailures=0;
+ if(starkTilesLoaded===1&&origin&&origin.county_fips==='39151')
+  updateImageryLabel('✓ Stark County OSIP4 2025 native 6-inch county aerial imagery loaded. Zoom beyond the available tile resolution may appear softer.');
+});
+starkAerial.on('tileerror',()=>{
+ if(!map.hasLayer(starkAerial)||starkTilesLoaded>0||++starkTileFailures<8)return;
+ switchBaseLayer(ohAerial);
+ updateImageryLabel('Stark 2025 county tiles unavailable; switched to the Ohio OSIP statewide cache.');
+});
 const imageryControl=L.control.layers({
+ 'Ohio OSIP most-current (statewide)':ohAerial,
+ 'Stark County 2025 (6-inch)':starkAerial,
  'Massachusetts 2025 aerials (3/6-inch)':maAerial,
  'Kentucky 3-inch aerial (2022–2024)':kyAerial,
  'USGS aerial (lower resolution)':usgsTiles,
@@ -109,6 +151,22 @@ function chooseImagery(d){
   switchBaseLayer(kyAerial);kyAerial.redraw();
   updateImageryLabel('✓ Kentucky KyFromAbove: native 3-inch government photography (2022–2024).');
   return 'kentucky';
+ }
+ if(stateOf(d)==='OH'){
+  if(d.county_fips==='39151'){
+   starkTilesLoaded=0;starkTileFailures=0;
+   switchBaseLayer(starkAerial);starkAerial.redraw();
+   updateImageryLabel('Loading Stark County 2025 6-inch aerial tiles. Ohio OSIP statewide imagery is the fallback.');
+   return 'ohio_stark';
+  }
+  ohioTilesLoaded=0;ohioTileFailures=0;
+  switchBaseLayer(ohAerial);ohAerial.redraw();
+  if(d.county_fips==='39089'){
+   updateImageryLabel('Loading Ohio OSIP tiles and checking Licking County 2025 3-inch high-resolution photography…');
+   return 'ohio_licking';
+  }
+  updateImageryLabel('Loading Ohio OSIP official statewide aerial cache (2018–2025; native resolution varies by property).');
+  return 'ohio';
  }
  if(stateOf(d)==='MA'){
   maLoaded=0;maErrors=0;
@@ -251,7 +309,7 @@ $('togglePin').onclick=()=>{
 };
 const drawingLayers=L.featureGroup().addTo(map);
 function switchBaseLayer(layer){
- for(const other of [kyAerial,maAerial,usgsTiles,streets])if(other!==layer&&map.hasLayer(other))map.removeLayer(other);
+ for(const other of [kyAerial,maAerial,ohAerial,starkAerial,usgsTiles,streets])if(other!==layer&&map.hasLayer(other))map.removeLayer(other);
  if(!map.hasLayer(layer))layer.addTo(map);
 }
 function updateImageryLabel(message){$('imageryStatus').textContent=message}
@@ -263,7 +321,7 @@ function updateAttribution(source){
 }
 let imageryRefreshTimer=null, activeViewportKey=null, loadedViewportKey=null;
 map.on('moveend',()=>{
- if(!origin||['KY','MA'].includes(stateOf(origin))||activeDraw)return;
+ if(!origin||['KY','MA'].includes(stateOf(origin))||stateOf(origin)==='OH'&&origin.county_fips!=='39089'||activeDraw)return;
  if(imageryRefreshTimer)clearTimeout(imageryRefreshTimer);
  imageryRefreshTimer=setTimeout(()=>loadAerial(),950);
 });
@@ -352,10 +410,16 @@ $('searchForm').onsubmit=async e=>{
    'Property found. Loading Kentucky 3-inch aerial tiles…':
    mode==='massachusetts'?
    'Property found. Loading 2025 Massachusetts aerial tiles…':
+   mode==='ohio_stark'?
+   'Property found. Loading Stark County 2025 six-inch aerial tiles…':
+   mode==='ohio_licking'?
+   'Property found. Loading Ohio OSIP statewide tiles and Licking County 2025 three-inch imagery…':
+   mode==='ohio'?
+   'Property found. Loading official Ohio OSIP statewide aerial photography…':
    'Property found. Searching public state, county and federal aerial photography…';
   $('drawingHint').textContent='Tap Draw lawn, mark at least 3 corners, then Finish drawing. Zoom to inspect roof and lawn edges.';
   for(const id of ['drawLawn','drawExclude','undo','refresh'])$(id).disabled=false;
-  if(mode==='government')loadAerial();
+  if(mode==='government'||mode==='ohio_licking')loadAerial();
  }catch(ex){$('searchMsg').textContent=ex.message}
 };
 function geographicBounds(){
@@ -363,7 +427,7 @@ function geographicBounds(){
  return [b.getWest(),b.getSouth(),b.getEast(),b.getNorth()];
 }
 async function loadAerial(force=false){
- if(!origin||['KY','MA'].includes(stateOf(origin)))return false;
+ if(!origin||['KY','MA'].includes(stateOf(origin))||stateOf(origin)==='OH'&&origin.county_fips!=='39089')return false;
  const b=geographicBounds();
  const center=map.getCenter(),size=map.getSize();
  // Prevent calls for statewide-scale views; keep the existing street/aerial basemap.
@@ -386,6 +450,7 @@ async function loadAerial(force=false){
   '&lon='+encodeURIComponent(center.lng)+
   '&state='+encodeURIComponent(state)+
   '&county_fips='+encodeURIComponent(origin.county_fips||'')+
+  '&local_only='+(state==='OH'?'1':'0')+
   '&bbox='+encodeURIComponent(b.join(','))+
   '&width='+encodeURIComponent(Math.min(1800,Math.max(512,Math.round(size.x*1.8))))+
   '&height='+encodeURIComponent(Math.min(1800,Math.max(512,Math.round(size.y*1.8))));
@@ -447,6 +512,15 @@ $('refresh').onclick=()=>{
  }else if(stateOf(origin)==='MA'){
   switchBaseLayer(maAerial);maAerial.redraw();
   updateImageryLabel('Refreshing MassGIS 2025 aerial imagery…');
+ }else if(stateOf(origin)==='OH'){
+  if(origin.county_fips==='39151'){
+   starkTilesLoaded=0;starkTileFailures=0;switchBaseLayer(starkAerial);starkAerial.redraw();
+   updateImageryLabel('Refreshing Stark County 2025 aerial imagery…');
+  }else{
+   ohioTilesLoaded=0;ohioTileFailures=0;switchBaseLayer(ohAerial);ohAerial.redraw();
+   updateImageryLabel('Refreshing Ohio OSIP statewide aerial imagery…');
+   if(origin.county_fips==='39089')loadAerial(true);
+  }
  }else loadAerial(true);
 };
 function setDrawingControls(on){$('finishDraw').disabled=!on;$('cancelDraw').disabled=!on}
