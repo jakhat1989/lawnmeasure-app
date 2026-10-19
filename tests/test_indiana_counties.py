@@ -62,7 +62,7 @@ class IndianaTests(unittest.TestCase):
   # service availability and real photo sharpness require a separate live QA.
   with app.test_client() as client:
    with client.session_transaction() as sess:sess["owner"]=True
-   good=Mock(content=b"\\xff\\xd8"+b"0"*7000,raise_for_status=Mock())
+   good=Mock(content=bytes.fromhex("ffd8")+b"0"*7000,raise_for_status=Mock())
    with patch("app.http.get",return_value=good) as req:
     resp=client.get("/api/aerial",query_string={
       "lat":"40.058","lon":"-86.055","state":"IN","county_fips":"18057",
