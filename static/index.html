@@ -4,6 +4,10 @@
 .house-pin{position:relative;width:46px;height:55px;filter:drop-shadow(0 2px 4px #0b2d3380)}
 .house-pin-body{position:absolute;top:1px;left:4px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;background:#1767df;border:3px solid white;border-radius:50%;font-size:19px}
 .house-pin-tail{position:absolute;top:32px;left:17px;width:12px;height:12px;background:#1767df;transform:rotate(45deg);border-right:2px solid white;border-bottom:2px solid white}
+.house-pin-approximate .house-pin-body,.house-pin-approximate .house-pin-tail{background:#c87b12}
+.house-pin-saved .house-pin-body,.house-pin-saved .house-pin-tail{background:#15803d}
+.house-pin-icon{z-index:800!important}
+
 .hidden{display:none!important}@media(max-width:1250px){main{grid-template-columns:300px 1fr}main>.card:last-child{grid-column:1/-1}}@media(max-width:720px){main{grid-template-columns:1fr}main>.card:last-child{grid-column:auto}#map{height:440px}.map-wrap{min-height:440px}}
 </style></head><body><header><b>🌿 Lawn<span>Quote</span> <small style="font-size:11px;font-weight:400">OWNER</small></b><button id="logout">Sign out</button></header>
 <div id="lock" class="lock"><section class="card"><h2>Private business owner access</h2><p>Enter the access code configured on the app server. This is a private quoting tool, not a customer portal.</p><form id="login"><label>Owner access code</label><input type="password" id="code" required autocomplete="current-password"><button class="primary" style="width:100%;margin-top:14px">Sign in</button></form><p id="lockMsg" class="status"></p></section></div>
@@ -112,7 +116,7 @@ usgsTiles.on('tileerror',()=>{
  $('searchMsg').textContent='Aerial map tiles could not load. Switched to streets. Use the map layer selector to retry aerial.';
 });
 let origin=null,aerialLayer=null,shapes=[],sqft=0,mode='area',loading=false,activeDraw=null,areaRequestId=0,emailConfigured=false,aerialController=null;
-let housePin=null,housePinShown=true,pinPlaceMode=false,originalPin=null,pinStorageKey='';
+let housePin=null,housePinShown=true,pinPlaceMode=false,originalPin=null,pinStorageKey='',originalPinAccuracy='approximate';
 const housePinIcon=L.divIcon({
  className:'house-pin-icon',
  html:'<div class="house-pin" aria-hidden="true"><span class="house-pin-tail"></span><span class="house-pin-body">🏠</span></div>',
@@ -136,9 +140,12 @@ function savedRoofPosition(key,base){
 }
 function showPinStatus(message){$('pinStatus').textContent=message}
 function pinNotice(d){
+ const origin=d.pin_source||'Address search';
+ if(d.pin_accuracy==='rooftop_recorded')
+  return '🏠 Government-recorded rooftop point ('+origin+'). This is a higher-quality match, but please compare the pin with the actual roof before quoting.';
  if(d.pin_accuracy==='address_point')
-  return '🏠 Address-point match (building/parcel estimate) via ArcGIS. Check the roof before quoting; some records still use an entrance point. Drag or tap Place pin on roof to correct.';
- return '⚠️ Approximate Census address match — not confirmed on the roof. Tap Place pin on roof, then tap the actual roof. Your corrected location will be saved in this browser.';
+  return '📍 Street and house number matched ('+origin+'), but the source does not certify a rooftop location. Check the photograph or tap Place pin on roof.';
+ return '⚠️ Only an approximate street address match is available. The Census coordinates are estimated along the road — not on the house. Tap Place pin on roof to save a correction.';
 }
 function finishPinPlacement(){
  pinPlaceMode=false;$('placePin').textContent='⌖ Place pin on roof';
@@ -155,21 +162,29 @@ function adjustHousePin(location){
  try{localStorage.setItem(pinStorageKey,JSON.stringify({
   lat:newLocation.lat,lng:newLocation.lng,editedAt:new Date().toISOString()
  }))}catch(e){showPinStatus('Pin moved, but this browser blocked saving the correction.');return}
- showPinStatus('✓ House pin manually placed on the roof and saved in this browser for future searches. Lawn drawings and quote prices are unchanged.');
+ housePin.setIcon(L.divIcon({className:'house-pin-icon house-pin-saved',html:'<div class="house-pin" aria-hidden="true"><span class="house-pin-tail"></span><span class="house-pin-body">🏠</span></div>',iconSize:[46,55],iconAnchor:[23,48],popupAnchor:[0,-42]}));
+ showPinStatus('✓ Pin correction saved locally for this property. Only you have confirmed the spot; it does not affect lawn drawings or quote prices.');
 }
 function setHousePin(d){
  finishPinPlacement();
  if(housePin){map.removeLayer(housePin);housePin=null}
  housePinShown=true;
  originalPin={lat:d.lat,lng:d.lon};
+ originalPinAccuracy=d.pin_accuracy||'approximate';
  pinStorageKey=housePinKey(d.address);
  const saved=savedRoofPosition(pinStorageKey,originalPin);
  const location=saved||originalPin;
  housePin=L.marker([location.lat,location.lng],{
+  // An approximate address is deliberately shown in amber, not as a verified rooftop.
+  icon:L.divIcon({
+   className:'house-pin-icon '+(saved?'house-pin-saved':d.pin_accuracy==='approximate'?'house-pin-approximate':''),
+   html:'<div class="house-pin" aria-hidden="true"><span class="house-pin-tail"></span><span class="house-pin-body">🏠</span></div>',
+   iconSize:[46,55],iconAnchor:[23,48],popupAnchor:[0,-42]
+  }),
   icon:housePinIcon,draggable:true,autoPan:true,zIndexOffset:1000,
   title:'Property house pin — drag to adjust rooftop position'
  }).addTo(map);
- housePin.bindTooltip('House location — drag to correct',{
+ housePin.bindTooltip(saved?'Saved manual roof correction':d.pin_accuracy==='rooftop_recorded'?'Government-recorded rooftop point':'Approximate address point — check roof',{
   direction:'top',offset:[0,-38]
  });
  housePin.bindPopup('🏠 House location marker. Check the roof visually, then drag or tap Place pin on roof. Manually placed pins are remembered in this browser.');
@@ -207,6 +222,10 @@ $('resetPin').onclick=()=>{
  try{localStorage.removeItem(pinStorageKey)}catch(e){}
  const p=L.latLng(originalPin);
  housePin.setLatLng(p);
+ housePin.setIcon(L.divIcon({
+  className:'house-pin-icon '+(originalPinAccuracy==='approximate'?'house-pin-approximate':''),
+  html:'<div class="house-pin" aria-hidden="true"><span class="house-pin-tail"></span><span class="house-pin-body">🏠</span></div>',
+  iconSize:[46,55],iconAnchor:[23,48],popupAnchor:[0,-42]}));
  origin.lat=p.lat;origin.lon=p.lng;
  showPinStatus('Pin reset to the geocoding result (may be approximate). Use Place pin on roof to save a manual correction again.');
 };
