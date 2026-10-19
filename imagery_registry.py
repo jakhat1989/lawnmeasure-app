@@ -10,6 +10,14 @@ STATE_CODES=frozenset(("AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME
 # Entries: display label, public image URL, service type, approximate native inch/pixel,
 # source vintage, publisher, documentation or authoritative service metadata URL.
 SOURCES={
+ "OH_LICKING_2025":("Licking County Ohio 2025 three-inch orthophotography",
+  "https://apps.lickingcounty.gov/arcgis/rest/services/Basemaps/Imagery2025/MapServer/export",
+  "map",3,"2025","Licking County GIS",
+  "https://apps.lickingcounty.gov/arcgis/rest/services/Basemaps/Imagery2025/MapServer"),
+ "OH_OSIP_DYNAMIC":("Ohio statewide OSIP most-current (dynamic backup)",
+  "https://maps.ohio.gov/image/rest/services/osip_most_current/ImageServer/exportImage",
+  "image",None,"2017-2024 dynamic service","Ohio OGRIP",
+  "https://maps.ohio.gov/image/rest/services/osip_most_current/ImageServer"),
  "IL_COOK":("Cook County 2025 orthoimagery",
   "https://gis.cookcountyil.gov/imagery/rest/services/CookOrtho2025/ImageServer/exportImage",
   "image",6,"2025","Cook County GIS",
@@ -56,6 +64,7 @@ for block in range(1,5):
     endpoint+"/exportImage","image",6,"2025","Illinois State Geological Survey",endpoint)
 
 COUNTY_OVERRIDE={
+ "39089":("OH_LICKING_2025",),
  # FIPS from Census geographies API. County point bbox is used only when FIPS is unavailable.
  "17031":("IL_COOK",),
  "12083":("FL_MARION_2024","FL_MARION"),
@@ -63,6 +72,7 @@ COUNTY_OVERRIDE={
 
 STATE_SERVICES={
  "MD":("MD_3IN","MD_6IN"),
+ "OH":("OH_OSIP_DYNAMIC",),
  "NC":("NC_LATEST",),
 }
 # Massachusetts 2025 public TILE cache is in frontend (3-inch Cape Cod; 6-inch elsewhere).
@@ -100,6 +110,7 @@ def select_government_sources(state,lat,lon,county_fips=""):
 def coverage_summary():
  # This shows registry progress only. It does not claim counties verified.
  curated={"KY":"3-inch state tile service","MA":"2025 3/6-inch state tile service",
+   "OH":"OSIP statewide 2018-2025 mixed-resolution cache; Licking 3-inch and Stark 6-inch county sources",
    "MD":"partial 3-inch plus statewide 6-inch","NC":"statewide latest 6-inch",
    "IL":"2025 regional 6-inch block services plus Cook County",
    "FL":"selected county/district high-resolution services"}
