@@ -22,8 +22,9 @@
 <section class="card"><h2>2. Aerial property view</h2><div class="map-btns"><button id="drawLawn" class="primary" disabled>+ Draw lawn</button><button id="drawExclude" disabled>− Exclude house / driveway</button><button id="finishDraw" disabled style="background:#156a3d;color:white">✓ Finish drawing</button><button id="cancelDraw" disabled>Cancel drawing</button><button id="undo" disabled>Undo last shape</button><button id="refresh" disabled>Refresh view</button>
 <button id="centerPin" disabled>⌖ Find house pin</button><button id="placePin" disabled style="background:#d8e8ff;color:#1e4d94">⌖ Place pin on roof</button><button id="resetPin" disabled>Reset pin</button><button id="togglePin" disabled>Hide pin</button></div>
 <p id="pinStatus" role="status" class="hint" style="margin:0 0 12px;padding:9px;background:#ecf3ff;border-radius:8px">🏠 The searched home will get a house pin. A street-address result can be approximate; tap Place pin on roof for a correction that stays saved in this browser.</p><p id="drawingHint" role="status" class="hint" style="padding:9px 11px;background:#eaf4ec;border-radius:8px">Find an address, then select Draw lawn to begin.</p><div class="map-wrap"><div id="map"></div></div>
-<p id="imageryStatus" class="hint" role="status" aria-live="polite" style="background:#e7f6e9;padding:10px;border-radius:9px;margin:12px 0">Loading map provider settings…</p>
-<details style="border:1px solid #dee9dd;padding:10px;border-radius:9px;margin-top:10px">
+<p id="imageryStatus" class="hint" role="status" aria-live="polite" style="background:#fff0d2;padding:12px;border-radius:9px;margin:12px 0;font-weight:700">Checking whether ArcGIS World Imagery is activated…</p>
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button id="checkImagery">↻ Check satellite imagery connection</button><small class="hint">ArcGIS must be enabled before higher-resolution nationwide imagery will display.</small></div>
+<details id="arcgisSetup" style="border:1px solid #dee9dd;padding:10px;border-radius:9px;margin-top:10px">
  <summary style="font-weight:700;font-size:13px;cursor:pointer">Activate sharper nationwide aerial imagery — ArcGIS</summary>
  <p class="hint">The app supports <a href="https://location.arcgis.com/" target="_blank" rel="noopener">Esri ArcGIS Location Platform</a> World Imagery. It works across all 50 states. Photo detail varies and some areas will still have lower resolution.</p>
  <p class="hint">Create an ArcGIS Location Platform account and a browser API key with <strong>Location services → Basemaps</strong> access. Enable <strong>Geocoding / Places</strong> permissions as well to get better house address-point matches, if your account supports them. Alternatively, supply a separate server-side <code>ARCGIS_GEOCODING_API_KEY</code> with geocoding access in Render. Restrict the key's allowed referrers to <code>https://lawnquote-owner-tool.onrender.com</code>. Check <a href="https://location.arcgis.com/pricing/" target="_blank" rel="noopener">Esri pricing</a> and imagery rights for your business.</p>
@@ -105,7 +106,7 @@ function chooseImagery(d){
   return 'kentucky';
  }
  switchBaseLayer(usgsTiles);
- updateImageryLabel('USGS national imagery may be blurry. Activate ArcGIS World Imagery for broader coverage.');
+ updateImageryLabel('⚠️ ArcGIS NOT ACTIVE. USGS national imagery is the fallback and may appear blurry in Florida, Illinois and other states. See ArcGIS setup below.');
  return 'usgs';
 }
 let usgsLoaded=false,tileFailures=0;
@@ -253,7 +254,7 @@ function updateImageryLabel(message){
 function nationalMapLoaded(){
  nationwideTileLoads++;
  if(nationwideTileLoads===1&&mapLayerSelected(nationwideTiles)){
-  updateImageryLabel('ArcGIS World Imagery loaded. Detail and photo age vary by address.');
+  updateImageryLabel('✓ ArcGIS World Imagery ACTIVE — satellite tiles loaded. Photo sharpness and age vary by location.');
   if(origin)$('searchMsg').textContent='Aerial imagery loaded. Draw the area you want to price.';
  }
 }
@@ -265,20 +266,28 @@ function nationalMapError(){
   updateImageryLabel('ArcGIS aerial tiles unavailable. Showing Kentucky high-resolution backup.');
  }else{
   switchBaseLayer(usgsTiles);
-  updateImageryLabel('ArcGIS tiles unavailable. Showing USGS national imagery; detail may be limited.');
+  updateImageryLabel('⚠️ ArcGIS tiles did not load. Check that your API key is valid and has basemap-tile access. USGS imagery is being shown instead.');
  }
  $('searchMsg').textContent='ArcGIS imagery did not load. A fallback map is shown. Check your API key permissions or service availability.';
 }
 async function configureNationwideImagery(){
- if(nationwideConfigured)return;
  const data=await api('/api/map-config');
  if(!data.provider_configured||!data.public_token){
-  updateImageryLabel('Nationwide ArcGIS World Imagery is not activated yet. Government imagery backups remain available.');
-  return;
+  updateImageryLabel('⚠️ ArcGIS World Imagery NOT ACTIVE. Florida, Illinois and most other states are currently using lower-resolution USGS imagery. Add ARCGIS_API_KEY in Render → Environment, then click Check satellite imagery connection.');
+  if($('arcgisSetup'))$('arcgisSetup').open=true;
+  $('imageryStatus').style.background='#fff0d2';
+  return false;
  }
  if(!L.esri||!L.esri.tiledMapLayer){
-  updateImageryLabel('ArcGIS mapping library did not load; government imagery is still available.');
-  return;
+  updateImageryLabel('ArcGIS API key found but the map library failed to load. Please refresh the page.');
+  $('imageryStatus').style.background='#fff0d2';
+  return false;
+ }
+ if(nationwideConfigured&&nationwideTiles){
+  if(origin)chooseImagery(origin);
+  updateImageryLabel('ArcGIS API key detected. Loading satellite tiles — look for "ArcGIS imagery loaded" confirmation.');
+  nationwideTiles.redraw();
+  return true;
  }
  const tiles=L.esri.tiledMapLayer({
   url:'https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer',
@@ -290,9 +299,18 @@ async function configureNationwideImagery(){
  tiles.on('tileerror',nationalMapError);
  nationwideTiles=tiles;nationwideConfigured=true;
  imageryControl.addBaseLayer(nationwideTiles,'Nationwide aerial — ArcGIS World Imagery');
- updateImageryLabel('ArcGIS World Imagery configured for all 50 states. Clarity depends on local coverage.');
+ updateImageryLabel('ArcGIS API key detected — loading World Imagery tiles. Sharpness varies with the area and imagery source.');
+ $('imageryStatus').style.background='#e7f6e9';
+ if($('arcgisSetup'))$('arcgisSetup').open=false;
  if(origin)chooseImagery(origin);
+ return true;
 }
+$('checkImagery').onclick=async()=>{
+ $('checkImagery').disabled=true;
+ updateImageryLabel('Checking your ArcGIS configuration…');
+ try{await configureNationwideImagery()}catch(e){updateImageryLabel('Imagery check failed: '+e.message)}
+ finally{$('checkImagery').disabled=false}
+};
 let services=JSON.parse(localStorage.getItem('lq_services')||'null')||[{id:1,name:'Mowing',rate:25,minimum:40,selected:true},{id:2,name:'Fertilization',rate:12,minimum:0,selected:false},{id:3,name:'Weed Control',rate:15,minimum:0,selected:false}];
 for(const [id,key] of [['company','company'],['owner','owner'],['phone','phone']]){$(id).value=localStorage.getItem('lq_'+key)||'';$(id).addEventListener('input',()=>localStorage.setItem('lq_'+key,$(id).value))}
 async function api(url,opts){const r=await fetch(url,opts);let data=await r.json();if(!r.ok)throw Error(data.error||'Request failed');return data}
