@@ -219,10 +219,19 @@ def address():
  q=request.args.get("q","").strip()
  if not 8<=len(q)<=220:return err("Enter an address with street, city and state.")
  try:
-  r=http.get(CENSUS,params={"address":q,"benchmark":"Public_AR_Current",
-    "vintage":"Current_Current","layers":"Counties","format":"json"},timeout=(4,18))
-  r.raise_for_status()
-  found=r.json().get("result",{}).get("addressMatches",[])
+  try:
+   r=http.get(CENSUS,params={"address":q,"benchmark":"Public_AR_Current",
+     "vintage":"Current_Current","layers":"Counties","format":"json"},timeout=(3,9))
+   r.raise_for_status()
+   found=r.json().get("result",{}).get("addressMatches",[])
+  except (requests.RequestException,ValueError,TypeError):
+   found=[]
+  # The county lookup can fail independently; preserve the proven address search.
+  if not found:
+   fallback=http.get("https://geocoding.geo.census.gov/geocoder/locations/onelineaddress",
+      params={"address":q,"benchmark":"Public_AR_Current","format":"json"},timeout=(3,14))
+   fallback.raise_for_status()
+   found=fallback.json().get("result",{}).get("addressMatches",[])
   if not found:return err("Address not found. Include city, state and ZIP.",404)
   m=found[0]
   lat=float(m["coordinates"]["y"]);lon=float(m["coordinates"]["x"])
