@@ -35,7 +35,7 @@ Updated 2026-10-19. This is a **coverage audit and implementation tracker**, not
 | Hawaii | HI | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
 | Iowa | IA | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
 | Idaho | ID | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
-| Indiana | IN | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
+| Indiana | IN | IGIO current 2022–2025 statewide streaming candidate, generally six-inch with three-inch areas; Hamilton 2024 3-inch and Johnson North 2025 overrides; 2026 three-inch download releases in nine counties; [92-county tracker](INDIANA_COUNTY_TRACKER.md) | 0/92 audited |
 | Kansas | KS | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
 | Louisiana | LA | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
 | Maine | ME | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
@@ -68,7 +68,7 @@ Updated 2026-10-19. This is a **coverage audit and implementation tracker**, not
 | West Virginia | WV | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
 | Wyoming | WY | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
 
-**Current audit status:** 0 states and 0 counties independently certified complete. Curated high-resolution or mixed-resolution state/county imagery endpoints are configured for 7 states (OH, KY, FL, IL, MD, NC, MA); this is not per-county resolution certification. Ohio's statewide OSIP mosaic is installed for all 88 county lookups, with a complete [Ohio county-by-county status table](OHIO_COUNTY_TRACKER.md). Other unconfigured states use federal fallback. D.C. is tracked separately.
+**Current audit status:** 0 states and 0 counties independently certified complete. Curated high-resolution/mixed-resolution state and county imagery services are configured for **8 states** (IN, OH, KY, FL, IL, MD, NC, MA); this is not a three-inch or county-wide QA guarantee. Ohio has [88 county status entries](OHIO_COUNTY_TRACKER.md) and Indiana has [92 county entries](INDIANA_COUNTY_TRACKER.md). Unconfigured states use federal fallback. Washington, D.C., is tracked separately.
 
 ## Confirmed official public service metadata
 
