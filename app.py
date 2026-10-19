@@ -4,7 +4,7 @@ from functools import wraps
 import requests
 from PIL import Image, ImageStat, UnidentifiedImageError
 from imagery_registry import SOURCES as GOVERNMENT_IMAGERY, select_government_sources, coverage_summary
-from ohio_imagery import ohio_summary, ohio_county_info, OHIO_COUNTIES
+from ohio_imagery import ohio_summary, ohio_county_info, OHIO_COUNTIES, OSIP_INDEX
 from flask import Flask, jsonify, request, session, send_file, send_from_directory
 from shapely.geometry import shape
 from shapely.ops import transform, unary_union
@@ -262,6 +262,46 @@ def address():
 # Public government orthophotography providers. These are regional datasets, not
 # a nationwide three-inch imagery guarantee. All remote hosts are hardcoded.
 # For expansion, add vetted state/county imagery services here only.
+@app.get("/api/ohio-imagery-point")
+@authorized
+def ohio_imagery_point():
+ """Read an authoritative Ohio index *at this location*, never infer pixels from map zoom."""
+ try:
+  lat=number(request.args.get("lat"),38.2,42.2,"Ohio latitude")
+  lon=number(request.args.get("lon"),-85.2,-80.2,"Ohio longitude")
+ except ValueError as e:return err(str(e))
+ try:
+  params={"geometry":f"{lon},{lat}","geometryType":"esriGeometryPoint",
+   "inSR":4326,"spatialRel":"esriSpatialRelIntersects",
+   "outFields":"county,year,resolution,month_flown,name","returnGeometry":"false",
+   "resultRecordCount":50,"f":"json"}
+  r=http.get(OSIP_INDEX+"/query",params=params,timeout=(3,6))
+  r.raise_for_status()
+  data=r.json()
+  if data.get("error"):raise ValueError("Ohio index request rejected")
+  rows=[]
+  for feat in data.get("features",[]):
+   attrs=feat.get("attributes") or {}
+   try:year=int(attrs.get("year"))
+   except (ValueError,TypeError):continue
+   if not 2010<=year<=2030:continue
+   resolution=str(attrs.get("resolution") or "").strip()
+   try:res_num=float(resolution)
+   except ValueError:res_num=9999
+   rows.append((year,res_num,attrs))
+  if not rows:
+   return jsonify(found=False,message="No Ohio imagery year/resolution index at this point. Statewide OSIP cache remains available.")
+  rows.sort(key=lambda row:(-row[0],row[1]))
+  attrs=rows[0][2]
+  response=jsonify(found=True,county=str(attrs.get("county") or ""),
+    year=rows[0][0],resolution_inches=None if rows[0][1]==9999 else rows[0][1],
+    dataset=str(attrs.get("name") or ""),
+    note="Ohio OSIP June 2026 imagery index, not a guarantee the displayed cached tile has this precise resolution or capture date.")
+  response.headers["Cache-Control"]="private,max-age=3600"
+  return response
+ except (requests.RequestException,ValueError,TypeError,KeyError):
+  return jsonify(found=False,message="Ohio image year and native resolution could not be verified from the official index.")
+
 @app.get("/api/ohio-counties")
 @authorized
 def ohio_counties():
