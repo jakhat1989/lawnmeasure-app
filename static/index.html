@@ -307,6 +307,19 @@ $('searchForm').onsubmit=async e=>{
   activeViewportKey=null;loadedViewportKey=null;
   origin={...d};$('address').value=d.address;
   setHousePin(d);
+  // A geocoder may resolve DR to CT, ST to RD, etc. Surface it instead of
+  // quietly implying the typed address was located precisely.
+  const suffixOf=text=>{
+   const match=String(text||'').toUpperCase().match(/\b(DRIVE|DR|COURT|CT|STREET|ST|ROAD|RD|LANE|LN|AVENUE|AVE|CIRCLE|CIR|PLACE|PL|BOULEVARD|BLVD)\b/);
+   if(!match)return '';
+   const synonyms={DRIVE:'DR',COURT:'CT',STREET:'ST',ROAD:'RD',LANE:'LN',AVENUE:'AVE',CIRCLE:'CIR',PLACE:'PL',BOULEVARD:'BLVD'};
+   return synonyms[match[1]]||match[1];
+  };
+  const typedSuffix=suffixOf(searchedAddress),matchedSuffix=suffixOf(d.address);
+  if(typedSuffix&&matchedSuffix&&typedSuffix!==matchedSuffix){
+   $('pinStatus').textContent='⚠️ ADDRESS MISMATCH: You entered a '+typedSuffix+
+    ' address, but the search matched '+matchedSuffix+'. Confirm you have the correct home before measuring: '+d.address;
+  }
   const pinLocation=housePin.getLatLng();
   const mode=chooseImagery(d);
   map.invalidateSize();map.setView(pinLocation,19);
