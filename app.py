@@ -5,6 +5,8 @@ import requests
 from PIL import Image, ImageStat, UnidentifiedImageError
 from imagery_registry import SOURCES as GOVERNMENT_IMAGERY, select_government_sources, coverage_summary
 from ohio_imagery import ohio_summary, ohio_county_info, OHIO_COUNTIES, OSIP_INDEX
+from indiana_imagery import (indiana_summary, indiana_county_info, INDIANA_COUNTIES,
+    INDIANA_CURRENT_URL)
 from flask import Flask, jsonify, request, session, send_file, send_from_directory
 from shapely.geometry import shape
 from shapely.ops import transform, unary_union
@@ -255,6 +257,8 @@ def address():
   if improved:result.update(improved)
   if fips in OHIO_COUNTIES:
    result["imagery_coverage"]=ohio_county_info(fips)
+  elif fips in INDIANA_COUNTIES:
+   result["imagery_coverage"]=indiana_county_info(fips)
   response=jsonify(result);response.headers["Cache-Control"]="private,no-store"
   return response
  except (requests.RequestException,KeyError,ValueError,TypeError):
@@ -301,6 +305,55 @@ def ohio_imagery_point():
   return response
  except (requests.RequestException,ValueError,TypeError,KeyError):
   return jsonify(found=False,message="Ohio image year and native resolution could not be verified from the official index.")
+
+@app.get("/api/indiana-counties")
+@authorized
+def indiana_counties():
+ response=jsonify(indiana_summary())
+ response.headers["Cache-Control"]="private,max-age=3600"
+ return response
+
+@app.get("/api/indiana-imagery-point")
+@authorized
+def indiana_imagery_point():
+ """Read IGIO imagery catalog year/resolution at the searched location.
+ Never convert ImageServer overview pixel resolution into a per-house promise.
+ """
+ try:
+  lat=number(request.args.get("lat"),37.7,42.1,"Indiana latitude")
+  lon=number(request.args.get("lon"),-88.2,-84.6,"Indiana longitude")
+ except ValueError as ex:return err(str(ex))
+ try:
+  r=http.get(INDIANA_CURRENT_URL+"/query",params={
+   "geometry":f"{lon},{lat}","geometryType":"esriGeometryPoint",
+   "inSR":4326,"spatialRel":"esriSpatialRelIntersects",
+   "outFields":"County,Image_Year,Pixel_Size,Name",
+   "returnGeometry":"false","returnCountOnly":"false",
+   "resultRecordCount":40,"f":"json"},timeout=(3,8))
+  r.raise_for_status()
+  data=r.json()
+  if data.get("error"):raise ValueError("Indiana image catalog query rejected")
+  rows=[]
+  for feature in data.get("features",[]):
+   attrs=feature.get("attributes") or {}
+   raw_year=str(attrs.get("Image_Year") or "")
+   year_match=re.search(r"(20[12][0-9])",raw_year)
+   if not year_match:continue
+   year=int(year_match.group(1))
+   rows.append((year,attrs))
+  if not rows:return jsonify(found=False,message="No Indiana current-image catalog item returned at this location."))
+  rows.sort(key=lambda row:row[0],reverse=True)
+  year,attrs=rows[0]
+  response=jsonify(found=True,
+    year=year,
+    pixel_size_as_published=str(attrs.get("Pixel_Size") or ""),
+    county=str(attrs.get("County") or ""),
+    dataset=str(attrs.get("Name") or ""),
+    note="Year and pixel size come from Indiana IGIO source catalog; verify the displayed mosaic against the property.")
+  response.headers["Cache-Control"]="private,max-age=3600"
+  return response
+ except (requests.RequestException,ValueError,TypeError,KeyError):
+  return jsonify(found=False,message="Indiana imagery year/resolution catalog is unavailable; the current imagery export can still work.")
 
 @app.get("/api/ohio-counties")
 @authorized
