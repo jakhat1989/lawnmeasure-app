@@ -16,7 +16,7 @@ class AerialRoutingTests(unittest.TestCase):
 
     def test_ocala_uses_marion_county_imagery_first(self):
         route=select_government_sources("FL",29.2125,-82.1108)
-        self.assertEqual(route[0],"FL_MARION")
+        self.assertEqual(route[:2],["FL_MARION_2024","FL_MARION"])
 
     def test_unregistered_state_uses_national_fallback(self):
         self.assertEqual(select_government_sources("TX",31.9,-97.1),
