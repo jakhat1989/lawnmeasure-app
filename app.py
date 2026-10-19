@@ -77,6 +77,93 @@ def unmerc(x,y):
 def bounding(lat,lon,radius):
  x,y=merc(lon,lat); half=radius/max(.2,math.cos(math.radians(lat)))
  return (x-half,y-half,x+half,y+half)
+NAD_POINTS="https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/Address_Points_from_National_Address_Database_view/FeatureServer/0/query"
+
+def normalized_street(value):
+ # Normalize road suffixes and compass directions without losing house/street identity.
+ replacements={"STREET":"ST","ST":"ST","ROAD":"RD","RD":"RD","AVENUE":"AVE",
+    "AVE":"AVE","DRIVE":"DR","DR":"DR","LANE":"LN","LN":"LN","COURT":"CT",
+    "CT":"CT","PLACE":"PL","PL":"PL","BOULEVARD":"BLVD","PARKWAY":"PKWY",
+    "CIRCLE":"CIR","TERRACE":"TER","HIGHWAY":"HWY","TRAIL":"TRL",
+    "NORTH":"N","SOUTH":"S","EAST":"E","WEST":"W",
+    "NORTHEAST":"NE","NORTHWEST":"NW","SOUTHEAST":"SE","SOUTHWEST":"SW"}
+ words=re.findall(r"[A-Z0-9]+",str(value or "").upper())
+ return " ".join(replacements.get(word,word) for word in words)
+
+def nad_address_point(address,census_lat,census_lon):
+ """Prefer an exact, nearby US DOT NAD address point; never infer a rooftop.
+    The authoritative dataset varies in coverage and Placement quality.
+ """
+ match=re.match(r"^\s*(\d{1,6})([A-Za-z]?)\s+(.+?),",address)
+ if not match:return None
+ house_number=int(match.group(1))
+ house_suffix=match.group(2).upper()
+ searched_street=normalized_street(match.group(3))
+ if not searched_street:return None
+ state_match=re.search(r",\s*([A-Z]{2})\s*(?:,\s*|\s+)(\d{5})(?:-\d{4})?\s*$",address.upper())
+ if not state_match:return None
+ state,zip_code=state_match.groups()
+ if not re.fullmatch(r"[A-Z]{2}",state):return None
+
+ # Bounded spatial search avoids querying the entire ~100m record dataset.
+ meters=350.0
+ delta_lat=meters/111000.0
+ delta_lon=meters/(111000.0*max(.2,math.cos(math.radians(census_lat))))
+ envelope={"xmin":census_lon-delta_lon,"ymin":census_lat-delta_lat,
+           "xmax":census_lon+delta_lon,"ymax":census_lat+delta_lat,
+           "spatialReference":{"wkid":4326}}
+ params={"where":f"Add_Number={house_number} AND State='{state}'",
+   "geometry":__import__("json").dumps(envelope),"geometryType":"esriGeometryEnvelope",
+   "inSR":4326,"outSR":4326,"spatialRel":"esriSpatialRelIntersects",
+   "outFields":"Add_Number,AddNum_Suf,StNam_Full,St_Name,St_PreDir,St_PosTyp,St_PosDir,Zip_Code,State,Placement,Lifecycle",
+   "returnGeometry":"true","resultRecordCount":120,"f":"json"}
+ try:
+  response=http.get(NAD_POINTS,params=params,timeout=(3,9))
+  response.raise_for_status()
+  data=response.json()
+  if data.get("error"):return None
+  matches=[]
+  for feature in data.get("features",[]):
+   attrs=feature.get("attributes") or {}
+   try:
+    if int(attrs.get("Add_Number"))!=house_number:continue
+   except (ValueError,TypeError):continue
+   if house_suffix and house_suffix!=str(attrs.get("AddNum_Suf") or "").upper().strip():continue
+   if attrs.get("State") and str(attrs["State"]).upper()!=state:continue
+   if attrs.get("Lifecycle") in ("Retired","Replaced","Expired"):continue
+   candidate_street=normalized_street(attrs.get("StNam_Full") or
+      " ".join(str(attrs.get(field) or "") for field in
+       ("St_PreDir","St_Name","St_PosTyp","St_PosDir")))
+   if candidate_street!=searched_street:continue
+   candidate_zip=re.search(r"\d{5}",str(attrs.get("Zip_Code") or ""))
+   if candidate_zip and candidate_zip.group(0)!=zip_code:continue
+   point=feature.get("geometry") or {}
+   lat=float(point.get("y"));lon=float(point.get("x"))
+   if not (18<=lat<=72 and -180<=lon<=180):continue
+   dist=math.hypot((lat-census_lat)*111000,
+                  (lon-census_lon)*111000*math.cos(math.radians(census_lat)))
+   if dist>350:continue
+   placement=str(attrs.get("Placement") or "").strip()
+   roof=placement.lower().startswith("structure - rooftop")
+   # Prefer explicitly recorded rooftop placement and exact ZIP.
+   score=(1 if roof else 0,int(bool(candidate_zip)), -dist)
+   matches.append((score,lat,lon,roof,placement))
+  if not matches:return None
+  matches.sort(reverse=True)
+  _,lat,lon,roof,placement=matches[0]
+  if roof:
+   return {"lat":lat,"lon":lon,"pin_accuracy":"rooftop_recorded",
+    "pin_source":"U.S. DOT National Address Database",
+    "pin_note":"Government address point classified as structure rooftop. Verify against the photo; records can still be wrong or outdated."}
+  return {"lat":lat,"lon":lon,"pin_accuracy":"address_point",
+   "pin_source":"U.S. DOT National Address Database",
+   "pin_note":"Exact street/house-number match to an address point ("+
+      (placement or "placement not stated")+
+      "). Not certified as rooftop location; verify manually."}
+ except (requests.RequestException,ValueError,TypeError,KeyError):
+  logging.info("USDOT NAD address point lookup unavailable; using another geocoder")
+ return None
+
 def rooftop_geocode(address, census_lat, census_lon):
  # World Geocoding returns display points for PointAddress matches when available.
  # It requires geocoding privileges. A separate server-side key is preferred.
@@ -139,7 +226,13 @@ def address():
   result={"address":m.get("matchedAddress",q),"lat":lat,"lon":lon,
           "pin_accuracy":"approximate","pin_source":"U.S. Census geocoder",
           "pin_note":"Approximate street-address location; this is not a verified rooftop point. Tap Place pin on roof to correct it."}
-  improved=rooftop_geocode(result["address"],lat,lon)
+  government=nad_address_point(result["address"],lat,lon)
+  # A high-quality official rooftop point is preferred; a non-roof point can be
+  # superseded by an ArcGIS PointAddress display location when available.
+  improved=government if government and government["pin_accuracy"]=="rooftop_recorded" else None
+  if not improved:
+   paid=rooftop_geocode(result["address"],lat,lon)
+   improved=paid or government
   if improved:result.update(improved)
   response=jsonify(result);response.headers["Cache-Control"]="private,no-store"
   return response
