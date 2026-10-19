@@ -23,7 +23,7 @@
 <button id="centerPin" disabled>⌖ Find house pin</button><button id="placePin" disabled style="background:#d8e8ff;color:#1e4d94">⌖ Place pin on roof</button><button id="resetPin" disabled>Reset pin</button><button id="togglePin" disabled>Hide pin</button></div>
 <p id="pinStatus" role="status" class="hint" style="margin:0 0 12px;padding:9px;background:#ecf3ff;border-radius:8px">🏠 The searched home will get a house pin. A street-address result can be approximate; tap Place pin on roof for a correction that stays saved in this browser.</p><p id="drawingHint" role="status" class="hint" style="padding:9px 11px;background:#eaf4ec;border-radius:8px">Find an address, then select Draw lawn to begin.</p><div class="map-wrap"><div id="map"></div></div>
 <p id="imageryStatus" class="hint" role="status" aria-live="polite" style="background:#e7f6e9;padding:12px;border-radius:9px;margin:12px 0;font-weight:650">Kentucky 3-inch imagery, government regional aerials, and nationwide federal imagery. Search a property to see which source loads.</p>
-<p class="hint">No ArcGIS World Imagery subscription, Mapbox token or account is required for these government image sources. Kentucky uses KyFromAbove. In parts of Illinois, the app requests Cook County 2025 or Illinois 2025 six-inch photography; in parts of Florida, it requests county or water-management aerials. All other locations use federal USDA/USGS imagery, which ranges in resolution and may be blurry. Some government imagery servers are hosted on ArcGIS REST software, but the app does not use Esri World Imagery or require an Esri API key. <strong>Three-inch aerial coverage cannot be guaranteed nationwide.</strong></p>
+<p class="hint">Curated public imagery currently includes Kentucky (3-inch), Massachusetts (2025; 3-inch Cape Cod / 6-inch elsewhere), Maryland (3-inch in selected areas / 6-inch statewide), North Carolina (latest 6-inch), Illinois (Cook County and 2025 blocks, 6-inch), and selected Florida counties. All other states still use federal USDA/USGS imagery, which may be blurry at rooftop level. No Esri World Imagery or Mapbox subscription is used; public government services may run on ArcGIS Server software. <strong>No U.S. county is yet certified as fully audited for coverage, rights, and reliability.</strong></p>
 <p class="hint">Photograph date, coverage, and commercial-reuse terms differ among providers. Confirm site conditions before issuing final quotes. Drawing area is approximate, not a property survey.</p></section>
 <section class="card"><h2>3. Services & quote</h2><div class="row"><input id="newService" placeholder="New service name"><button id="addService">Add</button></div><p class="hint">Check services to include in the quote. Enter a rate per 1,000 sq ft and an optional minimum charge.</p><div id="services"></div><h3>Customer details</h3><label>Customer name</label><input id="customerName" placeholder="Customer name"><label>Customer email</label><input id="customerEmail" type="email" placeholder="customer@example.com"><label>Quote notes</label><textarea id="notes" rows="3" placeholder="Services, schedule or estimate notes"></textarea><hr style="border:none;border-top:1px solid #e1e8e1;margin:18px 0"><div class="hint">Total estimated selected services</div><div id="total" class="total">$0.00</div><button class="primary" id="send" style="width:100%;margin:12px 0">Open email app — customer + owner CC</button><button id="copy" style="width:100%">Copy estimate text</button><p id="emailStatus" class="status" role="status" aria-live="polite"></p>
 <details id="emailSetup" style="margin-top:12px;padding:12px;background:#f0f6ef;border-radius:9px">
@@ -57,7 +57,26 @@ const kyAerial=L.tileLayer(
   bounds:L.latLngBounds([36.3,-89.7],[39.45,-81.7]),
   attribution:'Aerial imagery © KyFromAbove / Kentucky Division of Geographic Information (2022–2024)'
  });
+// Massachusetts 2025 public aerials: 6-inch statewide, 3-inch on Cape Cod.
+const maAerial=L.tileLayer(
+ 'https://tiles.arcgis.com/tiles/hGdibHYSPO59RG1h/arcgis/rest/services/Massachusetts_Aerial_Imagery_2025/MapServer/tile/{z}/{y}/{x}',{
+  maxNativeZoom:20,maxZoom:21,
+  bounds:L.latLngBounds([41.2,-73.6],[42.95,-69.6]),
+  attribution:'2025 aerial imagery &copy; MassGIS / Commonwealth of Massachusetts'
+ });
+let maLoaded=0,maErrors=0;
+maAerial.on('tileload',()=>{
+ maLoaded++;maErrors=0;
+ if(maLoaded===1&&origin&&stateOf(origin)==='MA')
+  updateImageryLabel('✓ Massachusetts 2025 MassGIS imagery displayed. Native 3-inch Cape Cod, 6-inch elsewhere.');
+});
+maAerial.on('tileerror',()=>{
+ if(!map.hasLayer(maAerial)||maLoaded>0||++maErrors<8)return;
+ switchBaseLayer(usgsTiles);
+ updateImageryLabel('MassGIS imagery unavailable at this address. Showing lower-resolution USGS aerial tiles.');
+});
 const imageryControl=L.control.layers({
+ 'Massachusetts 2025 aerials (3/6-inch)':maAerial,
  'Kentucky 3-inch aerial (2022–2024)':kyAerial,
  'USGS aerial (lower resolution)':usgsTiles,
  'Street map':streets
@@ -90,6 +109,12 @@ function chooseImagery(d){
   switchBaseLayer(kyAerial);kyAerial.redraw();
   updateImageryLabel('✓ Kentucky KyFromAbove: native 3-inch government photography (2022–2024).');
   return 'kentucky';
+ }
+ if(stateOf(d)==='MA'){
+  maLoaded=0;maErrors=0;
+  switchBaseLayer(maAerial);maAerial.redraw();
+  updateImageryLabel('Loading Massachusetts 2025 aerials (3-inch on Cape Cod, 6-inch elsewhere).');
+  return 'massachusetts';
  }
  switchBaseLayer(usgsTiles);
  updateImageryLabel('Government imagery: searching for a sharper state/county aerial source. If none is available, federal USDA/USGS imagery will be used; it may be less detailed.');
@@ -226,7 +251,7 @@ $('togglePin').onclick=()=>{
 };
 const drawingLayers=L.featureGroup().addTo(map);
 function switchBaseLayer(layer){
- for(const other of [kyAerial,usgsTiles,streets])if(other!==layer&&map.hasLayer(other))map.removeLayer(other);
+ for(const other of [kyAerial,maAerial,usgsTiles,streets])if(other!==layer&&map.hasLayer(other))map.removeLayer(other);
  if(!map.hasLayer(layer))layer.addTo(map);
 }
 function updateImageryLabel(message){$('imageryStatus').textContent=message}
@@ -238,7 +263,7 @@ function updateAttribution(source){
 }
 let imageryRefreshTimer=null, activeViewportKey=null, loadedViewportKey=null;
 map.on('moveend',()=>{
- if(!origin||isKentuckyAddress(origin)||activeDraw)return;
+ if(!origin||['KY','MA'].includes(stateOf(origin))||activeDraw)return;
  if(imageryRefreshTimer)clearTimeout(imageryRefreshTimer);
  imageryRefreshTimer=setTimeout(()=>loadAerial(),950);
 });
@@ -325,10 +350,12 @@ $('searchForm').onsubmit=async e=>{
   map.invalidateSize();map.setView(pinLocation,19);
   $('searchMsg').textContent=mode==='kentucky'?
    'Property found. Loading Kentucky 3-inch aerial tiles…':
+   mode==='massachusetts'?
+   'Property found. Loading 2025 Massachusetts aerial tiles…':
    'Property found. Searching public state, county and federal aerial photography…';
   $('drawingHint').textContent='Tap Draw lawn, mark at least 3 corners, then Finish drawing. Zoom to inspect roof and lawn edges.';
   for(const id of ['drawLawn','drawExclude','undo','refresh'])$(id).disabled=false;
-  if(mode!=='kentucky')loadAerial();
+  if(mode==='government')loadAerial();
  }catch(ex){$('searchMsg').textContent=ex.message}
 };
 function geographicBounds(){
@@ -336,7 +363,7 @@ function geographicBounds(){
  return [b.getWest(),b.getSouth(),b.getEast(),b.getNorth()];
 }
 async function loadAerial(force=false){
- if(!origin||isKentuckyAddress(origin))return false;
+ if(!origin||['KY','MA'].includes(stateOf(origin)))return false;
  const b=geographicBounds();
  const center=map.getCenter(),size=map.getSize();
  // Prevent calls for statewide-scale views; keep the existing street/aerial basemap.
@@ -358,6 +385,7 @@ async function loadAerial(force=false){
  const url='/api/aerial?lat='+encodeURIComponent(center.lat)+
   '&lon='+encodeURIComponent(center.lng)+
   '&state='+encodeURIComponent(state)+
+  '&county_fips='+encodeURIComponent(origin.county_fips||'')+
   '&bbox='+encodeURIComponent(b.join(','))+
   '&width='+encodeURIComponent(Math.min(1800,Math.max(512,Math.round(size.x*1.8))))+
   '&height='+encodeURIComponent(Math.min(1800,Math.max(512,Math.round(size.y*1.8))));
@@ -374,6 +402,8 @@ async function loadAerial(force=false){
   if(blob.size<4500||!blob.type.startsWith('image/'))throw new Error('Image service returned invalid data.');
   const source=response.headers.get('X-Imagery-Source')||'Government aerial imagery';
   const coverage=response.headers.get('X-Imagery-Coverage')||'national';
+  const native=response.headers.get('X-Imagery-Native-Inches')||'unknown';
+  const vintage=response.headers.get('X-Imagery-Vintage')||'varies';
   const objectUrl=URL.createObjectURL(blob);
   const bounds=L.latLngBounds([b[1],b[0]],[b[3],b[2]]);
   const next=L.imageOverlay(objectUrl,bounds,{alt:source,interactive:false});
@@ -384,7 +414,9 @@ async function loadAerial(force=false){
    updateImageryLabel('Detailed photo could not display. The fallback basemap is visible.');
   });
   next.on('load',()=>{
-   updateImageryLabel('✓ Displaying '+source+' ('+coverage+' coverage). Detail and photo age vary by property; zooming refreshes the imagery.');
+   updateImageryLabel('✓ Displaying '+source+' ('+coverage+
+    '; advertised native '+(native==='unknown'?'resolution unconfirmed':native+' inches')+
+    '; imagery '+vintage+'). Provider availability and actual coverage vary by property.');
    $('searchMsg').textContent='Property located. You can draw lawn areas and house exclusions.';
   });
   if(aerialLayer){const prev=aerialLayer._url;map.removeLayer(aerialLayer);if(prev&&prev.startsWith('blob:'))URL.revokeObjectURL(prev)}
@@ -412,6 +444,9 @@ $('refresh').onclick=()=>{
  if(isKentuckyAddress(origin)){
   switchBaseLayer(kyAerial);kyAerial.redraw();
   updateImageryLabel('Refreshing Kentucky high-resolution aerial imagery…');
+ }else if(stateOf(origin)==='MA'){
+  switchBaseLayer(maAerial);maAerial.redraw();
+  updateImageryLabel('Refreshing MassGIS 2025 aerial imagery…');
  }else loadAerial(true);
 };
 function setDrawingControls(on){$('finishDraw').disabled=!on;$('cancelDraw').disabled=!on}
