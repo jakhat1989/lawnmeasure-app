@@ -238,41 +238,90 @@ def address():
   return response
  except (requests.RequestException,KeyError,ValueError,TypeError):
   return err("Address search unavailable. Try again.",502)
+# Public government orthophotography providers. These are regional datasets, not
+# a nationwide three-inch imagery guarantee. All remote hosts are hardcoded.
+# For expansion, add vetted state/county imagery services here only.
+GOVERNMENT_IMAGERY={
+ "IL_COOK":("Cook County Illinois 2025 — 6-inch aerials",
+    "https://gis.cookcountyil.gov/imagery/rest/services/CookOrtho2025/ImageServer/exportImage","image"),
+ "IL_EAST_1":("Illinois state 2025 — 6-inch aerials",
+    "https://data.isgs.illinois.edu/arcgis/rest/services/Imagery/IL_Blk1_East_2025/ImageServer/exportImage","image"),
+ "FL_MARION":("Marion County Florida 2023 — county orthophotography",
+    "https://gis.marionfl.org/image/rest/services/Aerials/Aerials_2023/ImageServer/exportImage","image"),
+ "FL_SW":("SW Florida Water Management District 2023 — 6-inch aerials",
+    "https://www25.swfwmd.state.fl.us/arcgiswmis/rest/services/Imagery/Imagery_2023_NC/MapServer/export","map"),
+ "USGS_PLUS":("USGS NAIP Plus national aerial (resolution varies)",
+    "https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPPlus/ImageServer/exportImage","image"),
+ "USGS_NAIP":("USGS NAIP national aerial (about 0.6 m)",
+    "https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer/exportImage","image"),
+}
+def select_government_sources(state,lat,lon):
+ state=(state or "").upper()
+ chosen=[]
+ # Approximate county bounds. A provider can still have incomplete mosaics.
+ if state=="IL":
+  if 41.35<=lat<=42.25 and -88.4<=lon<=-87.45:
+   chosen.append("IL_COOK")
+  if 40.7<=lat<=42.52 and -89.2<=lon<=-87.45:
+   chosen.append("IL_EAST_1")
+ if state=="FL":
+  if 28.94<=lat<=29.56 and -82.58<=lon<=-81.58:
+   chosen.append("FL_MARION")
+  if 25.7<=lat<=29.55 and -83.5<=lon<=-81.15:
+   chosen.append("FL_SW")
+ return chosen+["USGS_PLUS","USGS_NAIP"]
+
 @app.get("/api/aerial")
 @authorized
 def aerial():
  try:
-  lat=number(request.args.get("lat"),18,72,"latitude")
+  # Accept exact map viewport bounds in geographic lon/lat (Leaflet image overlay).
+  raw=request.args.get("bbox","").split(",")
+  if len(raw)!=4:raise ValueError("Missing geographic image bounds.")
+  west,south,east,north=[float(x) for x in raw]
+  if not all(math.isfinite(x) for x in (west,south,east,north)):
+   raise ValueError("Invalid map viewport.")
+  if not(-180<=west<east<=180 and 17<=south<north<=72):
+   raise ValueError("Invalid map viewport coordinates.")
+  if east-west>.075 or north-south>.075:
+   raise ValueError("Zoom closer to the property to load aerial imagery.")
+  lat=number(request.args.get("lat"),17,72,"latitude")
   lon=number(request.args.get("lon"),-180,180,"longitude")
-  radius=number(request.args.get("radius",90),25,600,"view radius")
- except ValueError as e:return err(str(e))
- box=bounding(lat,lon,radius)
- params={"bbox":",".join(map(str,box)),"bboxSR":3857,"imageSR":3857,
-    "size":"900,900","format":"jpg","f":"image"}
- providers=[
-  ("USGS NAIP Imagery","https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer/exportImage"),
-  ("USGS NAIP Plus",NAIP),
- ]
- for name,url in providers:
+  if not(west-.02<=lon<=east+.02 and south-.02<=lat<=north+.02):
+   raise ValueError("Recenter on the property for an aerial image.")
+  state=request.args.get("state","").strip().upper()
+  if not re.fullmatch(r"[A-Z]{2}",state):state=""
+  width=int(number(request.args.get("width","1280"),512,1800,"image width"))
+  height=int(number(request.args.get("height","1050"),512,1800,"image height"))
+ except (ValueError,TypeError) as ex:return err(str(ex))
+ left,bottom=merc(west,south);right,top=merc(east,north)
+ extent=(left,bottom,right,top)
+ common={"bbox":",".join(map(str,extent)),"bboxSR":3857,
+         "imageSR":3857,"size":f"{width},{height}","format":"jpg","f":"image"}
+ for provider_key in select_government_sources(state,lat,lon):
+  name,url,kind=GOVERNMENT_IMAGERY[provider_key]
+  params=dict(common)
+  if kind=="map":params["transparent"]="false"
   try:
-   r=http.get(url,params=params,timeout=(4,11))
-   r.raise_for_status()
-   if not r.headers.get("Content-Type","").lower().startswith("image/"):
-    logging.warning("Aerial provider %s returned non-image content",name)
+   response=http.get(url,params=params,timeout=(3,9))
+   response.raise_for_status()
+   content=response.content
+   if not content.startswith(bytes.fromhex("ffd8")) and not content.startswith(bytes.fromhex("89504e47")):
+    logging.warning("Government imagery %s returned a non-image response",provider_key)
     continue
-   if len(r.content)<1000 or not (r.content.startswith(bytes.fromhex("ffd8")) or
-                                 r.content.startswith(bytes.fromhex("89504e47"))):
-    logging.warning("Aerial provider %s returned invalid image bytes",name)
+   if len(content)<4500:
+    logging.warning("Government imagery %s image too small",provider_key)
     continue
-   mimetype="image/png" if r.content.startswith(bytes.fromhex("89504e47")) else "image/jpeg"
-   resp=send_file(BytesIO(r.content),mimetype=mimetype)
-   resp.headers["Cache-Control"]="private,max-age=600"
-   resp.headers["X-Imagery-Source"]=name
-   return resp
+   mimetype="image/png" if content.startswith(bytes.fromhex("89504e47")) else "image/jpeg"
+   r=send_file(BytesIO(content),mimetype=mimetype)
+   r.headers["Cache-Control"]="private,max-age=360"
+   r.headers["X-Imagery-Source"]=name
+   r.headers["X-Imagery-Provider"]=provider_key
+   r.headers["X-Imagery-Coverage"]="regional" if not provider_key.startswith("USGS") else "national"
+   return r
   except requests.RequestException as exc:
-   logging.warning("Aerial provider %s temporarily unavailable: %s",name,type(exc).__name__)
- # This error does not prevent using the separate USGS tile basemap in the app.
- return err("High-resolution aerial imagery is temporarily unavailable. Continue with the USGS aerial basemap.",503)
+   logging.warning("Government imagery %s unavailable: %s",provider_key,type(exc).__name__)
+ return err("No detailed public imagery loaded for this address. Try Refresh view; image coverage and sharpness vary across states.",503)
 def parse_shapes(data,field):
  a=data.get(field,[])
  if not isinstance(a,list) or len(a)>75:raise ValueError("Too many outlines.")
