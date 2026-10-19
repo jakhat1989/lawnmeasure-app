@@ -51,7 +51,7 @@ Updated 2026-10-19. This is a **coverage audit and implementation tracker**, not
 | New Mexico | NM | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
 | Nevada | NV | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
 | New York | NY | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
-| Ohio | OH | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
+| Ohio | OH | Ohio OSIP statewide 2018–2025 cached aerials for all 88 counties; 2025 Licking 3-inch and Stark 6-inch sources; **88 county audits outstanding** — [register](OHIO_COUNTY_TRACKER.md) | Not complete |
 | Oklahoma | OK | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
 | Oregon | OR | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
 | Pennsylvania | PA | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
@@ -68,7 +68,7 @@ Updated 2026-10-19. This is a **coverage audit and implementation tracker**, not
 | West Virginia | WV | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
 | Wyoming | WY | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
 
-**Current audit status:** 0 states certified complete; 0 counties certified complete. Curated imagery endpoints now exist for 6 states (KY, FL, IL, MD, NC, MA); this is not county completion. Remaining 44 states use federal fallback. D.C. is tracked separately.
+**Current audit status:** 0 states and 0 counties independently certified complete. Curated high-resolution or mixed-resolution state/county imagery endpoints are configured for 7 states (OH, KY, FL, IL, MD, NC, MA); this is not per-county resolution certification. Ohio's statewide OSIP mosaic is installed for all 88 county lookups, with a complete [Ohio county-by-county status table](OHIO_COUNTY_TRACKER.md). Other unconfigured states use federal fallback. D.C. is tracked separately.
 
 ## Confirmed official public service metadata
 
