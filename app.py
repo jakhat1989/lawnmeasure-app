@@ -229,7 +229,7 @@ def address():
   counties=(m.get("geographies") or {}).get("Counties") or []
   county=counties[0] if counties else {}
   fips=str(county.get("GEOID") or "")
-  if not re.fullmatch(r"\\d{5}",fips):fips=""
+  if not re.fullmatch(r"\d{5}",fips):fips=""
   result={"address":m.get("matchedAddress",q),"lat":lat,"lon":lon,
           "county_name":county.get("NAME") or "",
           "county_fips":fips,
@@ -298,7 +298,7 @@ def aerial():
   state=request.args.get("state","").strip().upper()
   if not re.fullmatch(r"[A-Z]{2}",state):state=""
   county_fips=request.args.get("county_fips","").strip()
-  if not re.fullmatch(r"\\d{5}",county_fips):county_fips=""
+  if not re.fullmatch(r"\d{5}",county_fips):county_fips=""
   width=int(number(request.args.get("width","1280"),512,1800,"image width"))
   height=int(number(request.args.get("height","1050"),512,1800,"image height"))
  except (ValueError,TypeError) as ex:return err(str(ex))
