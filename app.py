@@ -2,6 +2,8 @@ import os, hmac, math, re, html, time, logging
 from io import BytesIO
 from functools import wraps
 import requests
+from PIL import Image, ImageStat, UnidentifiedImageError
+from imagery_registry import SOURCES as GOVERNMENT_IMAGERY, select_government_sources, coverage_summary
 from flask import Flask, jsonify, request, session, send_file, send_from_directory
 from shapely.geometry import shape
 from shapely.ops import transform, unary_union
@@ -15,7 +17,7 @@ http=requests.Session()
 http.headers["User-Agent"]="LawnQuoteOwner/1.0"
 failed={}
 R=6378137.0; SFT=10.76391041671
-CENSUS="https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
+CENSUS="https://geocoding.geo.census.gov/geocoder/geographies/onelineaddress"
 NAIP="https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPPlus/ImageServer/exportImage"
 
 def err(message,status=400):return jsonify(error=message),status
@@ -217,13 +219,20 @@ def address():
  q=request.args.get("q","").strip()
  if not 8<=len(q)<=220:return err("Enter an address with street, city and state.")
  try:
-  r=http.get(CENSUS,params={"address":q,"benchmark":"Public_AR_Current","format":"json"},timeout=(4,18))
+  r=http.get(CENSUS,params={"address":q,"benchmark":"Public_AR_Current",
+    "vintage":"Current_Current","layers":"Counties","format":"json"},timeout=(4,18))
   r.raise_for_status()
   found=r.json().get("result",{}).get("addressMatches",[])
   if not found:return err("Address not found. Include city, state and ZIP.",404)
   m=found[0]
   lat=float(m["coordinates"]["y"]);lon=float(m["coordinates"]["x"])
+  counties=(m.get("geographies") or {}).get("Counties") or []
+  county=counties[0] if counties else {}
+  fips=str(county.get("GEOID") or "")
+  if not re.fullmatch(r"\\d{5}",fips):fips=""
   result={"address":m.get("matchedAddress",q),"lat":lat,"lon":lon,
+          "county_name":county.get("NAME") or "",
+          "county_fips":fips,
           "pin_accuracy":"approximate","pin_source":"U.S. Census geocoder",
           "pin_note":"Approximate street-address location; this is not a verified rooftop point. Tap Place pin on roof to correct it."}
   government=nad_address_point(result["address"],lat,lon)
@@ -241,37 +250,32 @@ def address():
 # Public government orthophotography providers. These are regional datasets, not
 # a nationwide three-inch imagery guarantee. All remote hosts are hardcoded.
 # For expansion, add vetted state/county imagery services here only.
-GOVERNMENT_IMAGERY={
- "IL_COOK":("Cook County Illinois 2025 — 6-inch aerials",
-    "https://gis.cookcountyil.gov/imagery/rest/services/CookOrtho2025/ImageServer/exportImage","image"),
- "IL_EAST_1":("Illinois state 2025 — 6-inch aerials",
-    "https://data.isgs.illinois.edu/arcgis/rest/services/Imagery/IL_Blk1_East_2025/ImageServer/exportImage","image"),
- "FL_MARION_2024":("Marion County FL 2024 — high-resolution county aerial photography",
-    "https://gis.marionfl.org/image/rest/services/Aerials/Aerial2024/ImageServer/exportImage","image"),
- "FL_MARION":("Marion County FL 2023 — county aerial backup",
-    "https://gis.marionfl.org/image/rest/services/Aerials/Aerials_2023/ImageServer/exportImage","image"),
- "FL_SW":("SW Florida Water Management District 2023 — 6-inch aerials",
-    "https://www25.swfwmd.state.fl.us/arcgiswmis/rest/services/Imagery/Imagery_2023_NC/MapServer/export","map"),
- "USGS_PLUS":("USGS NAIP Plus national aerial (resolution varies)",
-    "https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPPlus/ImageServer/exportImage","image"),
- "USGS_NAIP":("USGS NAIP national aerial (about 0.6 m)",
-    "https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer/exportImage","image"),
-}
-def select_government_sources(state,lat,lon):
- state=(state or "").upper()
- chosen=[]
- # Approximate county bounds. A provider can still have incomplete mosaics.
- if state=="IL":
-  if 41.35<=lat<=42.25 and -88.4<=lon<=-87.45:
-   chosen.append("IL_COOK")
-  if 40.7<=lat<=42.52 and -89.2<=lon<=-87.45:
-   chosen.append("IL_EAST_1")
- if state=="FL":
-  if 28.94<=lat<=29.56 and -82.58<=lon<=-81.58:
-   chosen.extend(["FL_MARION_2024","FL_MARION"])
-  if 25.7<=lat<=29.55 and -83.5<=lon<=-81.15:
-   chosen.append("FL_SW")
- return chosen+["USGS_PLUS","USGS_NAIP"]
+@app.get("/api/imagery-coverage")
+@authorized
+def imagery_coverage():
+ response=jsonify(coverage_summary())
+ response.headers["Cache-Control"]="private,max-age=300"
+ return response
+
+def public_image_has_content(content):
+ """Reject blank or uniform out-of-coverage images when decodable."""
+ try:
+  with Image.open(BytesIO(content)) as source:
+   source.draft("RGB",(160,160))
+   img=source.convert("RGB")
+   img.thumbnail((160,160))
+   stat=ImageStat.Stat(img)
+   # A missing raster often renders nearly all white or transparent.
+   if max(stat.stddev[:3])<6:return False
+   from PIL import ImageChops
+   pixels=list(img.getdata())
+   if pixels:
+    mostly_blank=sum(1 for r,g,b in pixels if min(r,g,b)>245 or max(r,g,b)<7)
+    if mostly_blank/len(pixels)>.965:return False
+   return True
+ except (UnidentifiedImageError,OSError,ValueError):
+  # The upstream magic-byte filter still applies; don't claim verified quality.
+  return True
 
 @app.get("/api/aerial")
 @authorized
@@ -293,6 +297,8 @@ def aerial():
    raise ValueError("Recenter on the property for an aerial image.")
   state=request.args.get("state","").strip().upper()
   if not re.fullmatch(r"[A-Z]{2}",state):state=""
+  county_fips=request.args.get("county_fips","").strip()
+  if not re.fullmatch(r"\\d{5}",county_fips):county_fips=""
   width=int(number(request.args.get("width","1280"),512,1800,"image width"))
   height=int(number(request.args.get("height","1050"),512,1800,"image height"))
  except (ValueError,TypeError) as ex:return err(str(ex))
@@ -300,8 +306,8 @@ def aerial():
  extent=(left,bottom,right,top)
  common={"bbox":",".join(map(str,extent)),"bboxSR":3857,
          "imageSR":3857,"size":f"{width},{height}","format":"jpg","f":"image"}
- for provider_key in select_government_sources(state,lat,lon):
-  name,url,kind=GOVERNMENT_IMAGERY[provider_key]
+ for provider_key in select_government_sources(state,lat,lon,county_fips):
+  name,url,kind,resolution_inches,vintage,publisher,reference=GOVERNMENT_IMAGERY[provider_key]
   params=dict(common)
   if kind=="map":params["transparent"]="false"
   try:
@@ -314,6 +320,9 @@ def aerial():
    if len(content)<4500:
     logging.warning("Government imagery %s image too small",provider_key)
     continue
+   if not public_image_has_content(content):
+    logging.warning("Government imagery %s returned blank or nearly uniform raster",provider_key)
+    continue
    mimetype="image/png" if content.startswith(bytes.fromhex("89504e47")) else "image/jpeg"
    r=send_file(BytesIO(content),mimetype=mimetype)
    r.headers["Cache-Control"]="private,max-age=360"
@@ -321,6 +330,8 @@ def aerial():
    # em dashes, which Gunicorn rejected with HTTP 400 before serving the JPEG.
    r.headers["X-Imagery-Source"]=name.replace(" — "," - ").encode("ascii","ignore").decode("ascii")
    r.headers["X-Imagery-Provider"]=provider_key
+   r.headers["X-Imagery-Native-Inches"]=str(resolution_inches or "unknown")
+   r.headers["X-Imagery-Vintage"]=str(vintage).encode("ascii","ignore").decode("ascii")
    r.headers["X-Imagery-Coverage"]="regional" if not provider_key.startswith("USGS") else "national"
    return r
   except requests.RequestException as exc:
