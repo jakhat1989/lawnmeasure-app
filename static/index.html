@@ -22,15 +22,9 @@
 <section class="card"><h2>2. Aerial property view</h2><div class="map-btns"><button id="drawLawn" class="primary" disabled>+ Draw lawn</button><button id="drawExclude" disabled>− Exclude house / driveway</button><button id="finishDraw" disabled style="background:#156a3d;color:white">✓ Finish drawing</button><button id="cancelDraw" disabled>Cancel drawing</button><button id="undo" disabled>Undo last shape</button><button id="refresh" disabled>Refresh view</button>
 <button id="centerPin" disabled>⌖ Find house pin</button><button id="placePin" disabled style="background:#d8e8ff;color:#1e4d94">⌖ Place pin on roof</button><button id="resetPin" disabled>Reset pin</button><button id="togglePin" disabled>Hide pin</button></div>
 <p id="pinStatus" role="status" class="hint" style="margin:0 0 12px;padding:9px;background:#ecf3ff;border-radius:8px">🏠 The searched home will get a house pin. A street-address result can be approximate; tap Place pin on roof for a correction that stays saved in this browser.</p><p id="drawingHint" role="status" class="hint" style="padding:9px 11px;background:#eaf4ec;border-radius:8px">Find an address, then select Draw lawn to begin.</p><div class="map-wrap"><div id="map"></div></div>
-<p id="imageryStatus" class="hint" role="status" aria-live="polite" style="background:#fff0d2;padding:12px;border-radius:9px;margin:12px 0;font-weight:700">Checking whether ArcGIS World Imagery is activated…</p>
-<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button id="checkImagery">↻ Check satellite imagery connection</button><small class="hint">ArcGIS must be enabled before higher-resolution nationwide imagery will display.</small></div>
-<details id="arcgisSetup" style="border:1px solid #dee9dd;padding:10px;border-radius:9px;margin-top:10px">
- <summary style="font-weight:700;font-size:13px;cursor:pointer">Activate sharper nationwide aerial imagery — ArcGIS</summary>
- <p class="hint">The app supports <a href="https://location.arcgis.com/" target="_blank" rel="noopener">Esri ArcGIS Location Platform</a> World Imagery. It works across all 50 states. Photo detail varies and some areas will still have lower resolution.</p>
- <p class="hint">Create an ArcGIS Location Platform account and a browser API key with <strong>Location services → Basemaps</strong> access. Enable <strong>Geocoding / Places</strong> permissions as well to get better house address-point matches, if your account supports them. Alternatively, supply a separate server-side <code>ARCGIS_GEOCODING_API_KEY</code> with geocoding access in Render. Restrict the key's allowed referrers to <code>https://lawnquote-owner-tool.onrender.com</code>. Check <a href="https://location.arcgis.com/pricing/" target="_blank" rel="noopener">Esri pricing</a> and imagery rights for your business.</p>
- <p class="hint">In <a href="https://dashboard.render.com/web/srv-dba20i6q1p3s73a0r7sg" target="_blank" rel="noopener">Render → LawnQuote Owner → Environment</a>, add <code>ARCGIS_API_KEY</code> with your ArcGIS browser API key as the value. Save and redeploy, then refresh LawnQuote. Do not put your key into GitHub or this chat; restrict its usage by domain.</p>
- <p class="hint">After setup, ArcGIS World Imagery becomes the default. Kentucky 3-inch imagery and nationwide USGS imagery remain available as alternatives in the map selector.</p>
-</details><p class="hint">Nationwide: ArcGIS World Imagery when configured. Backups: KyFromAbove and USGS. Photograph age, sharpness, and availability vary by location. Drawn areas are estimates, not surveys.</p></section>
+<p id="imageryStatus" class="hint" role="status" aria-live="polite" style="background:#e7f6e9;padding:12px;border-radius:9px;margin:12px 0;font-weight:650">Kentucky 3-inch imagery, government regional aerials, and nationwide federal imagery. Search a property to see which source loads.</p>
+<p class="hint">No ArcGIS World Imagery subscription, Mapbox token or account is required for these government image sources. Kentucky uses KyFromAbove. In parts of Illinois, the app requests Cook County 2025 or Illinois 2025 six-inch photography; in parts of Florida, it requests county or water-management aerials. All other locations use federal USDA/USGS imagery, which ranges in resolution and may be blurry. Some government imagery servers are hosted on ArcGIS REST software, but the app does not use Esri World Imagery or require an Esri API key. <strong>Three-inch aerial coverage cannot be guaranteed nationwide.</strong></p>
+<p class="hint">Photograph date, coverage, and commercial-reuse terms differ among providers. Confirm site conditions before issuing final quotes. Drawing area is approximate, not a property survey.</p></section>
 <section class="card"><h2>3. Services & quote</h2><div class="row"><input id="newService" placeholder="New service name"><button id="addService">Add</button></div><p class="hint">Check services to include in the quote. Enter a rate per 1,000 sq ft and an optional minimum charge.</p><div id="services"></div><h3>Customer details</h3><label>Customer name</label><input id="customerName" placeholder="Customer name"><label>Customer email</label><input id="customerEmail" type="email" placeholder="customer@example.com"><label>Quote notes</label><textarea id="notes" rows="3" placeholder="Services, schedule or estimate notes"></textarea><hr style="border:none;border-top:1px solid #e1e8e1;margin:18px 0"><div class="hint">Total estimated selected services</div><div id="total" class="total">$0.00</div><button class="primary" id="send" style="width:100%;margin:12px 0">Open email app — customer + owner CC</button><button id="copy" style="width:100%">Copy estimate text</button><p id="emailStatus" class="status" role="status" aria-live="polite"></p>
 <details id="emailSetup" style="margin-top:12px;padding:12px;background:#f0f6ef;border-radius:9px">
   <summary style="cursor:pointer;font-weight:700;font-size:13px">Enable hands-free email delivery</summary>
@@ -45,7 +39,7 @@
 </details></section>
 </main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
-<script src="https://unpkg.com/esri-leaflet@3.0.19/dist/esri-leaflet.js"></script><script>
+<script>
 const $=id=>document.getElementById(id),fmt=n=>Math.round(n).toLocaleString('en-US'),usd=n=>'$'+Number(n).toFixed(2);
 const map=L.map('map',{zoomControl:true,maxZoom:21}).setView([39.02,-84.61],16);
 const streets=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
@@ -84,30 +78,22 @@ function isKentuckyAddress(d){
  return /(?:^|,\s*)KY(?:,|\s|$)/i.test(d.address||'') &&
   d.lat>=36.3 && d.lat<=39.45 && d.lon>=-89.7 && d.lon<=-81.7;
 }
+function stateOf(d){
+ const m=String(d.address||'').match(/,\s*([A-Z]{2})\s*(?:,\s*|\s+)\d{5}(?:-\d{4})?\s*$/i);
+ return m?m[1].toUpperCase():'';
+}
 function chooseImagery(d){
- if(aerialLayer){
-  map.removeLayer(aerialLayer);
-  if(aerialLayer._url&&aerialLayer._url.startsWith('blob:'))URL.revokeObjectURL(aerialLayer._url);
-  aerialLayer=null;
- }
- if(nationwideTiles){
-  if(aerialController)aerialController.abort();
-  nationwideTileLoads=0;nationwideTileErrors=0;
-  switchBaseLayer(nationwideTiles);
-  updateImageryLabel('Using ArcGIS World Imagery nationwide. Resolution depends on local coverage.');
-  return 'nationwide';
- }
+ if(aerialController)aerialController.abort();
+ if(aerialLayer){const old=aerialLayer._url;map.removeLayer(aerialLayer);if(old&&old.startsWith('blob:'))URL.revokeObjectURL(old);aerialLayer=null}
  if(isKentuckyAddress(d)){
-  if(aerialController)aerialController.abort();
   kyTileSuccess=0;kyTileErrors=0;
-  switchBaseLayer(kyAerial);
-  if(map.hasLayer(kyAerial))kyAerial.redraw();
-  updateImageryLabel('Using Kentucky KyFromAbove 3-inch imagery.');
+  switchBaseLayer(kyAerial);kyAerial.redraw();
+  updateImageryLabel('✓ Kentucky KyFromAbove: native 3-inch government photography (2022–2024).');
   return 'kentucky';
  }
  switchBaseLayer(usgsTiles);
- updateImageryLabel('⚠️ ArcGIS NOT ACTIVE. USGS national imagery is the fallback and may appear blurry in Florida, Illinois and other states. See ArcGIS setup below.');
- return 'usgs';
+ updateImageryLabel('Government imagery: searching for a sharper state/county aerial source. If none is available, federal USDA/USGS imagery will be used; it may be less detailed.');
+ return 'government';
 }
 let usgsLoaded=false,tileFailures=0;
 usgsTiles.on('tileload',()=>{usgsLoaded=true;tileFailures=0});
@@ -238,79 +224,24 @@ $('togglePin').onclick=()=>{
  $('togglePin').textContent=housePinShown?'Hide pin':'Show pin';
  showPinStatus(housePinShown?'🏠 Pin visible. You may drag it onto the roof.':'House pin hidden to let you trace the property. Tap Show pin to restore it.');
 };
-let nationwideTiles=null,nationwideConfigured=false,nationwideTileLoads=0,nationwideTileErrors=0;
 const drawingLayers=L.featureGroup().addTo(map);
-function mapLayerSelected(layer){return !!(layer&&map.hasLayer(layer))}
 function switchBaseLayer(layer){
- if(!layer)return;
- for(const other of [nationwideTiles,kyAerial,usgsTiles,streets]){
-  if(other&&other!==layer&&map.hasLayer(other))map.removeLayer(other);
- }
+ for(const other of [kyAerial,usgsTiles,streets])if(other!==layer&&map.hasLayer(other))map.removeLayer(other);
  if(!map.hasLayer(layer))layer.addTo(map);
 }
-function updateImageryLabel(message){
- if($('imageryStatus'))$('imageryStatus').textContent=message;
+function updateImageryLabel(message){$('imageryStatus').textContent=message}
+let governmentOverlayAttribution='';
+function updateAttribution(source){
+ if(governmentOverlayAttribution)map.attributionControl.removeAttribution(governmentOverlayAttribution);
+ governmentOverlayAttribution=source?('Aerial: '+source):'';
+ if(governmentOverlayAttribution)map.attributionControl.addAttribution(governmentOverlayAttribution);
 }
-function nationalMapLoaded(){
- nationwideTileLoads++;
- if(nationwideTileLoads===1&&mapLayerSelected(nationwideTiles)){
-  updateImageryLabel('✓ ArcGIS World Imagery ACTIVE — satellite tiles loaded. Photo sharpness and age vary by location.');
-  if(origin)$('searchMsg').textContent='Aerial imagery loaded. Draw the area you want to price.';
- }
-}
-function nationalMapError(){
- if(!mapLayerSelected(nationwideTiles))return;
- if(nationwideTileLoads>0||++nationwideTileErrors<8)return;
- if(origin&&isKentuckyAddress(origin)){
-  switchBaseLayer(kyAerial);
-  updateImageryLabel('ArcGIS aerial tiles unavailable. Showing Kentucky high-resolution backup.');
- }else{
-  switchBaseLayer(usgsTiles);
-  updateImageryLabel('⚠️ ArcGIS tiles did not load. Check that your API key is valid and has basemap-tile access. USGS imagery is being shown instead.');
- }
- $('searchMsg').textContent='ArcGIS imagery did not load. A fallback map is shown. Check your API key permissions or service availability.';
-}
-async function configureNationwideImagery(){
- const data=await api('/api/map-config');
- if(!data.provider_configured||!data.public_token){
-  updateImageryLabel('⚠️ ArcGIS World Imagery NOT ACTIVE. Florida, Illinois and most other states are currently using lower-resolution USGS imagery. Add ARCGIS_API_KEY in Render → Environment, then click Check satellite imagery connection.');
-  if($('arcgisSetup'))$('arcgisSetup').open=true;
-  $('imageryStatus').style.background='#fff0d2';
-  return false;
- }
- if(!L.esri||!L.esri.tiledMapLayer){
-  updateImageryLabel('ArcGIS API key found but the map library failed to load. Please refresh the page.');
-  $('imageryStatus').style.background='#fff0d2';
-  return false;
- }
- if(nationwideConfigured&&nationwideTiles){
-  if(origin)chooseImagery(origin);
-  updateImageryLabel('ArcGIS API key detected. Loading satellite tiles — look for "ArcGIS imagery loaded" confirmation.');
-  nationwideTiles.redraw();
-  return true;
- }
- const tiles=L.esri.tiledMapLayer({
-  url:'https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer',
-  token:data.public_token,
-  maxZoom:21,maxNativeZoom:21,
-  attribution:'Imagery &copy; Esri, Vantor, Earthstar Geographics, and the GIS User Community'
- });
- tiles.on('tileload',nationalMapLoaded);
- tiles.on('tileerror',nationalMapError);
- nationwideTiles=tiles;nationwideConfigured=true;
- imageryControl.addBaseLayer(nationwideTiles,'Nationwide aerial — ArcGIS World Imagery');
- updateImageryLabel('ArcGIS API key detected — loading World Imagery tiles. Sharpness varies with the area and imagery source.');
- $('imageryStatus').style.background='#e7f6e9';
- if($('arcgisSetup'))$('arcgisSetup').open=false;
- if(origin)chooseImagery(origin);
- return true;
-}
-$('checkImagery').onclick=async()=>{
- $('checkImagery').disabled=true;
- updateImageryLabel('Checking your ArcGIS configuration…');
- try{await configureNationwideImagery()}catch(e){updateImageryLabel('Imagery check failed: '+e.message)}
- finally{$('checkImagery').disabled=false}
-};
+let imageryRefreshTimer=null;
+map.on('moveend',()=>{
+ if(!origin||isKentuckyAddress(origin)||activeDraw)return;
+ if(imageryRefreshTimer)clearTimeout(imageryRefreshTimer);
+ imageryRefreshTimer=setTimeout(()=>loadAerial(),950);
+});
 let services=JSON.parse(localStorage.getItem('lq_services')||'null')||[{id:1,name:'Mowing',rate:25,minimum:40,selected:true},{id:2,name:'Fertilization',rate:12,minimum:0,selected:false},{id:3,name:'Weed Control',rate:15,minimum:0,selected:false}];
 for(const [id,key] of [['company','company'],['owner','owner'],['phone','phone']]){$(id).value=localStorage.getItem('lq_'+key)||'';$(id).addEventListener('input',()=>localStorage.setItem('lq_'+key,$(id).value))}
 async function api(url,opts){const r=await fetch(url,opts);let data=await r.json();if(!r.ok)throw Error(data.error||'Request failed');return data}
@@ -321,7 +252,7 @@ async function status(){
   $('lock').classList.toggle('hidden',s.authenticated);
   emailConfigured=!!s.email_configured;
   if(s.authenticated){
-   configureNationwideImagery().catch(e=>updateImageryLabel('Map configuration could not load: '+e.message));
+   updateImageryLabel('Government imagery mode active — no commercial satellite API key required. Search a property to identify its available photo source.');
   }
   $('send').textContent=emailConfigured?'Automatically email customer + business owner':'Open email app — customer + owner CC';
   $('emailStatus').textContent=emailConfigured?
@@ -366,80 +297,88 @@ function updatePrices(){
 }
 $('addService').onclick=()=>{const name=$('newService').value.trim();if(!name)return;services.push({id:Date.now(),name:name.slice(0,80),rate:0,minimum:0,selected:true});$('newService').value='';saveServices()};
 $('searchForm').onsubmit=async e=>{
- e.preventDefault();$('searchMsg').textContent='Finding the property…';
+ e.preventDefault();
+ $('searchMsg').textContent='Finding property…';
  try{
   const d=await api('/api/address?q='+encodeURIComponent($('address').value.trim()));
   cancelActive();clearCompleted();origin={...d};$('address').value=d.address;
   setHousePin(d);
   const pinLocation=housePin.getLatLng();
+  const mode=chooseImagery(d);
   map.invalidateSize();map.setView(pinLocation,19);
-  const mapSource=chooseImagery(d);
-  $('searchMsg').textContent=mapSource==='nationwide'?
-   'Property located. Loading nationwide ArcGIS World Imagery…':
-   mapSource==='kentucky'?
-    'Property located. Loading Kentucky high-resolution aerial photography…':
-    'Property located. USGS map can be blurry in some areas; checking for a better aerial photo…';
-  $('drawingHint').textContent='Tap Draw lawn, mark 3+ corners, then Finish drawing. Zoom in to outline buildings and grass accurately.';
+  $('searchMsg').textContent=mode==='kentucky'?
+   'Property found. Loading Kentucky 3-inch aerial tiles…':
+   'Property found. Searching public state, county and federal aerial photography…';
+  $('drawingHint').textContent='Tap Draw lawn, mark at least 3 corners, then Finish drawing. Zoom to inspect roof and lawn edges.';
   for(const id of ['drawLawn','drawExclude','undo','refresh'])$(id).disabled=false;
-  if(mapSource==='usgs')loadAerial();
+  if(mode!=='kentucky')loadAerial();
  }catch(ex){$('searchMsg').textContent=ex.message}
 };
-function radiusForZoom(){const z=map.getZoom();return Math.max(25,Math.min(600,110*Math.pow(2,19-z)))}
+function geographicBounds(){
+ const b=map.getBounds();
+ return [b.getWest(),b.getSouth(),b.getEast(),b.getNorth()];
+}
 async function loadAerial(){
- if(!origin)return false;
+ if(!origin||isKentuckyAddress(origin))return false;
  if(aerialController)aerialController.abort();
  const controller=new AbortController();aerialController=controller;
- const d={lat:origin.lat,lon:origin.lon},radius=radiusForZoom();
- const bounds=calcBounds(d.lat,d.lon,radius);
- const url='/api/aerial?lat='+encodeURIComponent(d.lat)+'&lon='+encodeURIComponent(d.lon)+'&radius='+encodeURIComponent(radius);
- $('searchMsg').textContent='Property located. Aerial basemap ready; checking sharper imagery…';
+ const b=geographicBounds();
+ const center=map.getCenter(),size=map.getSize();
+ // Prevent calls for statewide-scale views; keep the existing street/aerial basemap.
+ if(b[2]-b[0]>.075||b[3]-b[1]>.075){
+  updateImageryLabel('Zoom closer to the house to load full-resolution government aerial imagery.');
+  return false;
+ }
+ const state=stateOf(origin);
+ const url='/api/aerial?lat='+encodeURIComponent(center.lat)+
+  '&lon='+encodeURIComponent(center.lng)+
+  '&state='+encodeURIComponent(state)+
+  '&bbox='+encodeURIComponent(b.join(','))+
+  '&width='+encodeURIComponent(Math.min(1800,Math.max(512,Math.round(size.x*1.8))))+
+  '&height='+encodeURIComponent(Math.min(1800,Math.max(512,Math.round(size.y*1.8))));
+ updateImageryLabel('Loading government aerial photography for '+(state||'this property')+'…');
  try{
   const response=await fetch(url,{signal:controller.signal});
   if(!response.ok){
-   let message='Detailed photo unavailable.';
-   try{const body=await response.json();message=body.error||message}catch(e){}
-   throw new Error(message);
+   let msg='No detailed aerial photo available.';
+   try{msg=(await response.json()).error||msg}catch(e){}
+   throw new Error(msg);
   }
   const blob=await response.blob();
   if(controller.signal.aborted)return false;
-  if(blob.size<1000 || !blob.type.startsWith('image/'))throw new Error('Aerial provider returned invalid image data.');
+  if(blob.size<4500||!blob.type.startsWith('image/'))throw new Error('Image service returned invalid data.');
+  const source=response.headers.get('X-Imagery-Source')||'Government aerial imagery';
+  const coverage=response.headers.get('X-Imagery-Coverage')||'national';
   const objectUrl=URL.createObjectURL(blob);
-  const next=L.imageOverlay(objectUrl,bounds,{alt:'High-resolution property aerial image'});
+  const bounds=L.latLngBounds([b[1],b[0]],[b[3],b[2]]);
+  const next=L.imageOverlay(objectUrl,bounds,{alt:source,interactive:false});
   next.on('error',()=>{
    if(map.hasLayer(next))map.removeLayer(next);
    URL.revokeObjectURL(objectUrl);
    if(aerialLayer===next)aerialLayer=null;
-   $('searchMsg').textContent='High-resolution photo failed to display. USGS aerial basemap is available.';
+   updateImageryLabel('Detailed photo could not display. The fallback basemap is visible.');
   });
   next.on('load',()=>{
-   $('searchMsg').textContent='Property located. Aerial photograph ready; draw your service area.';
+   updateImageryLabel('✓ Displaying '+source+' ('+coverage+' coverage). Detail and photo age vary by property; zooming refreshes the imagery.');
+   $('searchMsg').textContent='Property located. You can draw lawn areas and house exclusions.';
   });
-  if(aerialLayer){const old=aerialLayer._url;map.removeLayer(aerialLayer);if(old&&old.startsWith('blob:'))URL.revokeObjectURL(old)}
+  if(aerialLayer){const prev=aerialLayer._url;map.removeLayer(aerialLayer);if(prev&&prev.startsWith('blob:'))URL.revokeObjectURL(prev)}
   aerialLayer=next.addTo(map);
+  updateAttribution(source);
   return true;
  }catch(ex){
-  if(ex.name!=='AbortError')$('searchMsg').textContent=
-   'Property located. Detailed photograph temporarily unavailable; showing aerial basemap. '+ex.message;
+  if(ex.name!=='AbortError'){
+   updateImageryLabel('⚠️ No sharper government image available here: '+ex.message+
+     ' The national USGS basemap remains visible and may be blurry at rooftop level.');
+  }
   return false;
  }finally{if(aerialController===controller)aerialController=null}
 }
-function calcBounds(lat,lon,r){let R=6378137, x=R*lon*Math.PI/180,y=R*Math.log(Math.tan(Math.PI/4+lat*Math.PI/360)),h=r/Math.cos(lat*Math.PI/180);const ll=(x,y)=>[ (2*Math.atan(Math.exp(y/R))-Math.PI/2)*180/Math.PI,(x/R)*180/Math.PI];return [ll(x-h,y-h),ll(x+h,y+h)]}
 $('refresh').onclick=()=>{
- if(nationwideTiles && origin){
-  nationwideTileLoads=0;nationwideTileErrors=0;
-  switchBaseLayer(nationwideTiles);nationwideTiles.redraw();
-  updateImageryLabel('Refreshing nationwide satellite map tiles…');
-  return;
- }
- if(origin && isKentuckyAddress(origin)){
-  kyTileSuccess=0;kyTileErrors=0;
-  if(aerialLayer){map.removeLayer(aerialLayer);aerialLayer=null}
-  if(!map.hasLayer(kyAerial)){
-   if(map.hasLayer(usgsTiles))map.removeLayer(usgsTiles);
-   if(map.hasLayer(streets))map.removeLayer(streets);
-   kyAerial.addTo(map);
-  }else kyAerial.redraw();
-  $('searchMsg').textContent='Refreshing Kentucky high-resolution aerial photography…';
+ if(!origin)return;
+ if(isKentuckyAddress(origin)){
+  switchBaseLayer(kyAerial);kyAerial.redraw();
+  updateImageryLabel('Refreshing Kentucky high-resolution aerial imagery…');
  }else loadAerial();
 };
 function setDrawingControls(on){$('finishDraw').disabled=!on;$('cancelDraw').disabled=!on}
