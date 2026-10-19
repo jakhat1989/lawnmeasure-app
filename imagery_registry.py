@@ -10,6 +10,18 @@ STATE_CODES=frozenset(("AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME
 # Entries: display label, public image URL, service type, approximate native inch/pixel,
 # source vintage, publisher, documentation or authoritative service metadata URL.
 SOURCES={
+ "IN_HAMILTON_2024_3IN":("Hamilton County IN 2024 native 3-inch orthophotos",
+  "https://di-ingov.img.arcgis.com/arcgis/rest/services/DynamicWebMercator/Indiana_County_Collect_2024_Imagery/ImageServer/exportImage",
+  "image",3,"2024","Indiana Geographic Information Office",
+  "https://di-ingov.img.arcgis.com/arcgis/rest/services/DynamicWebMercator/Indiana_County_Collect_2024_Imagery/ImageServer"),
+ "IN_JOHNSON_NORTH_2025":("North Johnson County Indiana spring 2025 ortho (partial coverage)",
+  "https://greenwoodgis.greenwood.in.gov/arcgis/rest/services/Ortho/JCNorth2025Ortho/MapServer/export",
+  "map",None,"2025","City of Greenwood GIS",
+  "https://greenwoodgis.greenwood.in.gov/arcgis/rest/services/Ortho/JCNorth2025Ortho/MapServer"),
+ "IN_CURRENT":("Indiana state latest streamed orthophotography (some 3-inch)",
+  "https://di-ingov.img.arcgis.com/arcgis/rest/services/DynamicWebMercator/Indiana_Current_Imagery/ImageServer/exportImage",
+  "image",None,"2022-2025 by county","Indiana Geographic Information Office (CC0)",
+  "https://di-ingov.img.arcgis.com/arcgis/rest/services/DynamicWebMercator/Indiana_Current_Imagery/ImageServer"),
  "OH_LICKING_2025":("Licking County Ohio 2025 three-inch orthophotography",
   "https://apps.lickingcounty.gov/arcgis/rest/services/Basemaps/Imagery2025/MapServer/export",
   "map",3,"2025","Licking County GIS",
@@ -64,6 +76,8 @@ for block in range(1,5):
     endpoint+"/exportImage","image",6,"2025","Illinois State Geological Survey",endpoint)
 
 COUNTY_OVERRIDE={
+ "18057":("IN_HAMILTON_2024_3IN",),
+ "18081":("IN_JOHNSON_NORTH_2025",),
  "39089":("OH_LICKING_2025",),
  # FIPS from Census geographies API. County point bbox is used only when FIPS is unavailable.
  "17031":("IL_COOK",),
@@ -73,6 +87,7 @@ COUNTY_OVERRIDE={
 STATE_SERVICES={
  "MD":("MD_3IN","MD_6IN"),
  "OH":("OH_OSIP_DYNAMIC",),
+ "IN":("IN_CURRENT",),
  "NC":("NC_LATEST",),
 }
 # Massachusetts 2025 public TILE cache is in frontend (3-inch Cape Cod; 6-inch elsewhere).
@@ -111,6 +126,7 @@ def coverage_summary():
  # This shows registry progress only. It does not claim counties verified.
  curated={"KY":"3-inch state tile service","MA":"2025 3/6-inch state tile service",
    "OH":"OSIP statewide 2018-2025 mixed-resolution cache; Licking 3-inch and Stark 6-inch county sources",
+   "IN":"Indiana latest 2022-2025 6-inch generally, selected 3-inch; 2026 bulk files in 9 counties not live",
    "MD":"partial 3-inch plus statewide 6-inch","NC":"statewide latest 6-inch",
    "IL":"2025 regional 6-inch block services plus Cook County",
    "FL":"selected county/district high-resolution services"}
