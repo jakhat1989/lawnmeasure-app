@@ -1,0 +1,24 @@
+name: LawnQuote Imagery and Measurement Tests
+on:
+  push:
+    branches:
+      - lawnquote-owner-app
+  pull_request:
+    branches:
+      - lawnquote-owner-app
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Syntax-check Flask server and registry
+        run: python -m py_compile app.py imagery_registry.py
+      - name: Test imagery routing and measurements
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
