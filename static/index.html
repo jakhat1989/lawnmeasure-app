@@ -23,6 +23,7 @@
 <button id="centerPin" disabled>⌖ Find house pin</button><button id="placePin" disabled style="background:#d8e8ff;color:#1e4d94">⌖ Place pin on roof</button><button id="resetPin" disabled>Reset pin</button><button id="togglePin" disabled>Hide pin</button></div>
 <p id="pinStatus" role="status" class="hint" style="margin:0 0 12px;padding:9px;background:#ecf3ff;border-radius:8px">🏠 The searched home will get a house pin. A street-address result can be approximate; tap Place pin on roof for a correction that stays saved in this browser.</p><p id="drawingHint" role="status" class="hint" style="padding:9px 11px;background:#eaf4ec;border-radius:8px">Find an address, then select Draw lawn to begin.</p><div class="map-wrap"><div id="map"></div></div>
 <p id="imageryStatus" class="hint" role="status" aria-live="polite" style="background:#e7f6e9;padding:12px;border-radius:9px;margin:12px 0;font-weight:650">Kentucky 3-inch imagery, government regional aerials, and nationwide federal imagery. Search a property to see which source loads.</p>
+<p id="ohioImageMetadata" class="hint" role="status" aria-live="polite" style="display:none;padding:8px;background:#eef3fa;border-radius:8px">Checking Ohio OSIP photo year and native resolution…</p>
 <details id="ohioCoverage" style="border:1px solid #dee9dd;padding:11px;border-radius:9px;margin:11px 0">
  <summary style="font-weight:700;cursor:pointer">Ohio imagery tracker — all 88 counties</summary>
  <p class="hint">Source registry for all counties. Statewide imagery is configured; each county's actual photograph year, native resolution, sample clarity, and usage rights still require verification.</p>
@@ -308,6 +309,29 @@ $('togglePin').onclick=()=>{
  showPinStatus(housePinShown?'🏠 Pin visible. You may drag it onto the roof.':'House pin hidden to let you trace the property. Tap Show pin to restore it.');
 };
 const drawingLayers=L.featureGroup().addTo(map);
+async function checkOhioImageMetadata(d){
+ const info=$('ohioImageMetadata');
+ if(stateOf(d)!=='OH'){info.style.display='none';return}
+ info.style.display='block';
+ info.textContent='Checking Ohio official acquisition-year / native-resolution index for this property…';
+ try{
+  const point=await api('/api/ohio-imagery-point?lat='+encodeURIComponent(d.lat)+
+   '&lon='+encodeURIComponent(d.lon));
+  if(!origin||origin.address!==d.address)return;
+  if(!point.found){
+   info.textContent=point.message+' Do not assume 3-inch resolution.';
+   return;
+  }
+  const native=point.resolution_inches===null||point.resolution_inches===undefined?
+   'resolution not provided':point.resolution_inches+'-inch indexed native resolution';
+  info.textContent='Ohio OSIP acquisition index near this address: '+point.year+
+   ', '+native+(point.county?', '+point.county:'')+
+   '. Index metadata is not proof the displayed imagery uses that exact photo.';
+ }catch(e){
+  if(origin&&origin.address===d.address)
+   info.textContent='Ohio OSIP year/resolution index unavailable. State aerial tiles still work.';
+ }
+}
 let ohioCountyTrackerLoaded=false;
 $('ohioCoverage').addEventListener('toggle',async()=>{
  if(!$('ohioCoverage').open||ohioCountyTrackerLoaded)return;
@@ -452,6 +476,8 @@ $('searchForm').onsubmit=async e=>{
   }
   const pinLocation=housePin.getLatLng();
   const mode=chooseImagery(d);
+  if(stateOf(d)==='OH')checkOhioImageMetadata(d);
+  else $('ohioImageMetadata').style.display='none';
   map.invalidateSize();map.setView(pinLocation,19);
   $('searchMsg').textContent=mode==='kentucky'?
    'Property found. Loading Kentucky 3-inch aerial tiles…':
