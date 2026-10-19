@@ -4,6 +4,7 @@ from functools import wraps
 import requests
 from PIL import Image, ImageStat, UnidentifiedImageError
 from imagery_registry import SOURCES as GOVERNMENT_IMAGERY, select_government_sources, coverage_summary
+from ohio_imagery import ohio_summary, ohio_county_info, OHIO_COUNTIES
 from flask import Flask, jsonify, request, session, send_file, send_from_directory
 from shapely.geometry import shape
 from shapely.ops import transform, unary_union
@@ -252,6 +253,8 @@ def address():
    paid=rooftop_geocode(result["address"],lat,lon)
    improved=paid or government
   if improved:result.update(improved)
+  if fips in OHIO_COUNTIES:
+   result["imagery_coverage"]=ohio_county_info(fips)
   response=jsonify(result);response.headers["Cache-Control"]="private,no-store"
   return response
  except (requests.RequestException,KeyError,ValueError,TypeError):
@@ -259,6 +262,13 @@ def address():
 # Public government orthophotography providers. These are regional datasets, not
 # a nationwide three-inch imagery guarantee. All remote hosts are hardcoded.
 # For expansion, add vetted state/county imagery services here only.
+@app.get("/api/ohio-counties")
+@authorized
+def ohio_counties():
+ response=jsonify(ohio_summary())
+ response.headers["Cache-Control"]="private,max-age=3600"
+ return response
+
 @app.get("/api/imagery-coverage")
 @authorized
 def imagery_coverage():
@@ -308,6 +318,7 @@ def aerial():
   if not re.fullmatch(r"[A-Z]{2}",state):state=""
   county_fips=request.args.get("county_fips","").strip()
   if not re.fullmatch(r"\d{5}",county_fips):county_fips=""
+  local_only=request.args.get("local_only")=="1"
   width=int(number(request.args.get("width","1280"),512,1800,"image width"))
   height=int(number(request.args.get("height","1050"),512,1800,"image height"))
  except (ValueError,TypeError) as ex:return err(str(ex))
@@ -315,7 +326,13 @@ def aerial():
  extent=(left,bottom,right,top)
  common={"bbox":",".join(map(str,extent)),"bboxSR":3857,
          "imageSR":3857,"size":f"{width},{height}","format":"jpg","f":"image"}
- for provider_key in select_government_sources(state,lat,lon,county_fips):
+ provider_keys=select_government_sources(state,lat,lon,county_fips)
+ # On top of Ohio's verified official tiled statewide cache, a failed county
+ # high-res export must leave those newer tiles visible, not cover with older
+ # dynamic OSIP imagery.
+ if local_only and state=="OH" and county_fips=="39089":
+  provider_keys=["OH_LICKING_2025"]
+ for provider_key in provider_keys:
   name,url,kind,resolution_inches,vintage,publisher,reference=GOVERNMENT_IMAGERY[provider_key]
   params=dict(common)
   if kind=="map":params["transparent"]="false"
