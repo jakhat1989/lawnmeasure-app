@@ -236,7 +236,7 @@ function updateAttribution(source){
  governmentOverlayAttribution=source?('Aerial: '+source):'';
  if(governmentOverlayAttribution)map.attributionControl.addAttribution(governmentOverlayAttribution);
 }
-let imageryRefreshTimer=null;
+let imageryRefreshTimer=null, activeViewportKey=null, loadedViewportKey=null;
 map.on('moveend',()=>{
  if(!origin||isKentuckyAddress(origin)||activeDraw)return;
  if(imageryRefreshTimer)clearTimeout(imageryRefreshTimer);
@@ -300,8 +300,12 @@ $('searchForm').onsubmit=async e=>{
  e.preventDefault();
  $('searchMsg').textContent='Finding property…';
  try{
-  const d=await api('/api/address?q='+encodeURIComponent($('address').value.trim()));
-  cancelActive();clearCompleted();origin={...d};$('address').value=d.address;
+  const searchedAddress=$('address').value.trim();
+  const d=await api('/api/address?q='+encodeURIComponent(searchedAddress));
+  cancelActive();clearCompleted();
+  if(aerialController)aerialController.abort();
+  activeViewportKey=null;loadedViewportKey=null;
+  origin={...d};$('address').value=d.address;
   setHousePin(d);
   const pinLocation=housePin.getLatLng();
   const mode=chooseImagery(d);
@@ -318,10 +322,8 @@ function geographicBounds(){
  const b=map.getBounds();
  return [b.getWest(),b.getSouth(),b.getEast(),b.getNorth()];
 }
-async function loadAerial(){
+async function loadAerial(force=false){
  if(!origin||isKentuckyAddress(origin))return false;
- if(aerialController)aerialController.abort();
- const controller=new AbortController();aerialController=controller;
  const b=geographicBounds();
  const center=map.getCenter(),size=map.getSize();
  // Prevent calls for statewide-scale views; keep the existing street/aerial basemap.
@@ -330,6 +332,16 @@ async function loadAerial(){
   return false;
  }
  const state=stateOf(origin);
+ // Don't abort an identical in-flight image request. It previously caused
+ // duplicate requests and empty HTTP responses for the Ocala test address.
+ const viewportKey=[
+  String(origin.address||''),...b.map(x=>x.toFixed(7)),
+  Math.round(size.x),Math.round(size.y)
+ ].join('|');
+ if(!force&&(viewportKey===activeViewportKey||viewportKey===loadedViewportKey))return true;
+ if(aerialController)aerialController.abort();
+ const controller=new AbortController();aerialController=controller;
+ activeViewportKey=viewportKey;
  const url='/api/aerial?lat='+encodeURIComponent(center.lat)+
   '&lon='+encodeURIComponent(center.lng)+
   '&state='+encodeURIComponent(state)+
@@ -364,6 +376,7 @@ async function loadAerial(){
   });
   if(aerialLayer){const prev=aerialLayer._url;map.removeLayer(aerialLayer);if(prev&&prev.startsWith('blob:'))URL.revokeObjectURL(prev)}
   aerialLayer=next.addTo(map);
+  loadedViewportKey=viewportKey;
   // Keep the image under editable lawn polygons and house pin.
   next.bringToBack();
   updateAttribution(source);
@@ -374,14 +387,19 @@ async function loadAerial(){
      ' The national USGS basemap remains visible and may be blurry at rooftop level.');
   }
   return false;
- }finally{if(aerialController===controller)aerialController=null}
+ }finally{
+  if(aerialController===controller){
+   aerialController=null;
+   activeViewportKey=null;
+  }
+ }
 }
 $('refresh').onclick=()=>{
  if(!origin)return;
  if(isKentuckyAddress(origin)){
   switchBaseLayer(kyAerial);kyAerial.redraw();
   updateImageryLabel('Refreshing Kentucky high-resolution aerial imagery…');
- }else loadAerial();
+ }else loadAerial(true);
 };
 function setDrawingControls(on){$('finishDraw').disabled=!on;$('cancelDraw').disabled=!on}
 function cancelActive(){
