@@ -182,7 +182,7 @@ def rooftop_geocode(address, census_lat, census_lon):
   if data.get("error"):
    logging.warning("ArcGIS geocoder unavailable: provider rejected request")
    return None
-  number_match=re.match(r"^\\s*(\\d+[A-Za-z]?)\\b",address)
+  number_match=re.match(r"^\s*(\d+[A-Za-z]?)\b",address)
   requested_house=number_match.group(1).upper() if number_match else None
   for candidate in data.get("candidates",[]):
    attrs=candidate.get("attributes") or {}
@@ -191,7 +191,7 @@ def rooftop_geocode(address, census_lat, census_lon):
    if requested_house:
     matched_house=str(attrs.get("AddNum") or "").strip().upper()
     if not matched_house:
-     matched_house_match=re.match(r"^\\s*(\\d+[A-Za-z]?)\\b",
+     matched_house_match=re.match(r"^\s*(\d+[A-Za-z]?)\b",
        str(attrs.get("Match_addr") or candidate.get("address") or ""))
      matched_house=matched_house_match.group(1).upper() if matched_house_match else ""
     if matched_house!=requested_house:continue
