@@ -26,7 +26,7 @@ Updated 2026-10-19. This is a **coverage audit and implementation tracker**, not
 | Alabama | AL | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
 | Arkansas | AR | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
 | Arizona | AZ | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
-| California | CA | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
+| California | CA | Napa 2025 ~2.94-inch, San Diego 2023 public 9-inch, CDFW statewide 2022 60-cm baseline; [58-county tracker](CALIFORNIA_COUNTY_TRACKER.md) | 0/58 audited |
 | Colorado | CO | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
 | Connecticut | CT | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
 | District of Columbia | DC | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
@@ -68,7 +68,7 @@ Updated 2026-10-19. This is a **coverage audit and implementation tracker**, not
 | West Virginia | WV | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
 | Wyoming | WY | Federal USDA/USGS aerial fallback only; public 3–6-inch imagery research pending | Not complete |
 
-**Current audit status:** 0 states and 0 counties independently certified complete. Curated high-resolution/mixed-resolution state and county imagery services are configured for **8 states** (IN, OH, KY, FL, IL, MD, NC, MA); this is not a three-inch or county-wide QA guarantee. Ohio has [88 county status entries](OHIO_COUNTY_TRACKER.md) and Indiana has [92 county entries](INDIANA_COUNTY_TRACKER.md). Unconfigured states use federal fallback. Washington, D.C., is tracked separately.
+**Current audit status:** 0 states and 0 counties independently certified complete. Curated state/county imagery integrations now exist in **9 states** (CA, IN, OH, KY, FL, IL, MD, NC, MA). This does not guarantee three-inch or even six-inch imagery throughout a state. California has a [58-county tracker](CALIFORNIA_COUNTY_TRACKER.md), Indiana a [92-county tracker](INDIANA_COUNTY_TRACKER.md), and Ohio an [88-county tracker](OHIO_COUNTY_TRACKER.md). Remaining states still rely on federal aerial fallbacks; D.C. is tracked separately.
 
 ## Confirmed official public service metadata
 
