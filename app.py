@@ -7,6 +7,7 @@ from imagery_registry import SOURCES as GOVERNMENT_IMAGERY, select_government_so
 from ohio_imagery import ohio_summary, ohio_county_info, OHIO_COUNTIES, OSIP_INDEX
 from indiana_imagery import (indiana_summary, indiana_county_info, INDIANA_COUNTIES,
     INDIANA_CURRENT_URL)
+from california_imagery import california_summary, california_county_info, CALIFORNIA_COUNTIES
 from flask import Flask, jsonify, request, session, send_file, send_from_directory
 from shapely.geometry import shape
 from shapely.ops import transform, unary_union
@@ -259,6 +260,8 @@ def address():
    result["imagery_coverage"]=ohio_county_info(fips)
   elif fips in INDIANA_COUNTIES:
    result["imagery_coverage"]=indiana_county_info(fips)
+  elif fips in CALIFORNIA_COUNTIES:
+   result["imagery_coverage"]=california_county_info(fips)
   response=jsonify(result);response.headers["Cache-Control"]="private,no-store"
   return response
  except (requests.RequestException,KeyError,ValueError,TypeError):
@@ -305,6 +308,13 @@ def ohio_imagery_point():
   return response
  except (requests.RequestException,ValueError,TypeError,KeyError):
   return jsonify(found=False,message="Ohio image year and native resolution could not be verified from the official index.")
+
+@app.get("/api/california-counties")
+@authorized
+def california_counties():
+ response=jsonify(california_summary())
+ response.headers["Cache-Control"]="private,max-age=3600"
+ return response
 
 @app.get("/api/indiana-counties")
 @authorized
