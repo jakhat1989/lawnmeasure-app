@@ -24,6 +24,7 @@
 <p id="pinStatus" role="status" class="hint" style="margin:0 0 12px;padding:9px;background:#ecf3ff;border-radius:8px">🏠 The searched home will get a house pin. A street-address result can be approximate; tap Place pin on roof for a correction that stays saved in this browser.</p><p id="drawingHint" role="status" class="hint" style="padding:9px 11px;background:#eaf4ec;border-radius:8px">Find an address, then select Draw lawn to begin.</p><div class="map-wrap"><div id="map"></div></div>
 <p id="imageryStatus" class="hint" role="status" aria-live="polite" style="background:#e7f6e9;padding:12px;border-radius:9px;margin:12px 0;font-weight:650">Top 50 metro aerial imagery focus. Existing government state and national services are still available. Search a property to see what imagery is actually displayed.</p>
 <p id="houstonImageryStatus" class="hint" role="status" aria-live="polite" style="display:none;padding:12px;border-radius:9px;background:#fff4d6;margin:10px 0">Houston metro imagery: checking public high-resolution sources…</p>
+<p id="houstonLicensedSource" class="hint" style="display:none;margin:8px 0">For Houston, Pasadena, Katy, Sugar Land and The Woodlands, the <a href="https://www.h-gac.com/imagery/aerial" target="_blank" rel="noopener noreferrer">H-GAC 2024 six-inch regional photography</a> is a paid, licensed dataset. A commercial imagery license and an approved serving method are needed before LawnQuote can use it.</p>
 <p id="metroPriorityStatus" role="status" aria-live="polite" class="hint" style="padding:10px;background:#eef3fa;border-radius:8px;font-weight:650">Priority: 50 largest U.S. metro areas and their suburbs. Search an address to check whether it is in a target metro.</p>
 <details id="metroCoverage" style="border:1px solid #bfd2c4;padding:11px;border-radius:9px;margin:11px 0">
  <summary style="font-weight:700;cursor:pointer">Top 50 metro-area imagery tracker — includes suburbs</summary>
@@ -355,8 +356,8 @@ function updateHoustonImageryStatus(d,provider,native){
   (metro&&metro.target===true&&metro.rank===5)||
   (d.lat>=28.75&&d.lat<=30.55&&d.lon>=-96.15&&d.lon<=-94.2)
  );
- if(!houston){box.style.display='none';return}
- box.style.display='block';
+ if(!houston){box.style.display='none';$('houstonLicensedSource').style.display='none';return}
+ box.style.display='block';$('houstonLicensedSource').style.display='block';
  const galveston=inGalvestonPublishedFootprint(d);
  if(provider&&provider.startsWith('TX_GALVESTON_')){
   box.style.background='#e7f6e9';
@@ -416,7 +417,7 @@ $('metroCoverage').addEventListener('toggle',async()=>{
   for(const item of rows){
    const row=document.createElement('tr');
    const values=[item.rank,item.name,Number(item.population_2025).toLocaleString(),
-     item.metro_image_qa_complete?'Complete':'Pending'];
+     item.metro_image_qa_complete?'Complete':item.rank===5?'Galveston source added — Houston core pending':'Pending'];
    for(const value of values){
     const cell=document.createElement('td');cell.textContent=String(value);
     cell.style.cssText='padding:6px;border-bottom:1px solid #e6eae6';
