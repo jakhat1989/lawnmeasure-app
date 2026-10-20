@@ -18,6 +18,10 @@ Official MSA footprints: [Census delineation files](https://www.census.gov/progr
 - Local government and statewide image sources from earlier work are still selected as before; other markets retain national government fallbacks. Out-of-scope addresses can still be measured and quoted.
 - **No imagery provider is newly certified as sharp or licensed metro-wide.** 0 of 50 areas have been independently audited end to end.
 
+## Active Houston metro improvement (priority #5)
+
+[Detailed Houston/Galveston imagery implementation and licensing status](HOUSTON_METRO_IMAGERY.md): public City of Galveston aerial photography **2026** (native pixel size not yet confirmed), **2025 at 1-inch**, and **2024 at 3-inch**, routed only within the city's conservative public mosaic footprint. These sources do **not** cover most of Harris, Fort Bend, Montgomery, Brazoria or the wider Houston metro. H-GAC's **2024 six-inch regional imagery** is sold under license rather than being free commercial imagery. Existing USGS NAIP Plus remains the fallback for most Houston addresses. Houston metro QA is still **pending**.
+
 ## Metro-by-metro imagery QA criteria
 
 - [ ] Record Census MSA CBSA code and complete county membership/boundaries, including multi-state suburban counties.
