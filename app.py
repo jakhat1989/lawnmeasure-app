@@ -341,7 +341,7 @@ def indiana_imagery_point():
    if not year_match:continue
    year=int(year_match.group(1))
    rows.append((year,attrs))
-  if not rows:return jsonify(found=False,message="No Indiana current-image catalog item returned at this location."))
+  if not rows:return jsonify(found=False,message="No Indiana current-image catalog item returned at this location.")
   rows.sort(key=lambda row:row[0],reverse=True)
   year,attrs=rows[0]
   response=jsonify(found=True,
