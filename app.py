@@ -8,6 +8,7 @@ from ohio_imagery import ohio_summary, ohio_county_info, OHIO_COUNTIES, OSIP_IND
 from indiana_imagery import (indiana_summary, indiana_county_info, INDIANA_COUNTIES,
     INDIANA_CURRENT_URL)
 from california_imagery import california_summary, california_county_info, CALIFORNIA_COUNTIES
+from metro_imagery import metro_summary, find_top_metro, CENSUS_TIGER_METRO_QUERY
 from flask import Flask, jsonify, request, session, send_file, send_from_directory
 from shapely.geometry import shape
 from shapely.ops import transform, unary_union
@@ -217,6 +218,55 @@ def rooftop_geocode(address, census_lat, census_lon):
   logging.info("ArcGIS address-point lookup unavailable; using Census fallback")
  return None
 
+def metro_at_location(lat,lon,geo_result=None):
+ """Resolve a 2025 OMB MSA at an address, including all suburban counties.
+
+ First use the Census geocoder's metro geography if present; otherwise use
+ the official Census TIGERweb 2025 metro polygon layer (not a city radius).
+ """
+ geographies=geo_result or {}
+ for key,features in geographies.items():
+  if "Metropolitan Statistical Areas" not in key or not features:continue
+  attributes=features[0]
+  title=str(attributes.get("BASENAME") or attributes.get("NAME") or "").replace(" Metro Area","").strip()
+  cbsa=str(attributes.get("GEOID") or attributes.get("CBSA") or "")
+  if title:
+   return find_top_metro(title,cbsa) or {
+     "target":False,"name":title,"cbsa_code":cbsa,
+     "note":"Address is in an official metropolitan area outside the top 50."
+   }
+ try:
+  r=http.get(CENSUS_TIGER_METRO_QUERY,params={
+    "geometry":f"{lon},{lat}","geometryType":"esriGeometryPoint",
+    "inSR":4326,"spatialRel":"esriSpatialRelIntersects",
+    "outFields":"GEOID,BASENAME","returnGeometry":"false",
+    "resultRecordCount":2,"f":"json"
+   },timeout=(3,6))
+  r.raise_for_status()
+  data=r.json()
+  if data.get("error"):raise ValueError("Census TIGERweb service error")
+  rows=data.get("features") or []
+  if rows:
+   attrs=rows[0].get("attributes") or {}
+   title=str(attrs.get("BASENAME") or "").strip()
+   cbsa=str(attrs.get("GEOID") or "")
+   return find_top_metro(title,cbsa) or {
+     "target":False,"name":title,"cbsa_code":cbsa,
+     "note":"Metropolitan area identified; outside the top 50 image-source priorities."
+   }
+  return {"target":False,"name":"",
+          "note":"No 2025 Census metropolitan area covers these coordinates."}
+ except (requests.RequestException,ValueError,TypeError,KeyError):
+  return {"target":None,"name":"",
+          "note":"Metro boundary lookup unavailable; measurements and existing aerial providers remain available."}
+
+@app.get("/api/top-metros")
+@authorized
+def top_metros():
+ response=jsonify(metro_summary())
+ response.headers["Cache-Control"]="private,max-age=3600"
+ return response
+
 @app.get("/api/address")
 @authorized
 def address():
@@ -225,7 +275,7 @@ def address():
  try:
   try:
    r=http.get(CENSUS,params={"address":q,"benchmark":"Public_AR_Current",
-     "vintage":"Current_Current","layers":"Counties","format":"json"},timeout=(3,9))
+     "vintage":"Current_Current","layers":"Counties,Metropolitan Statistical Areas","format":"json"},timeout=(3,9))
    r.raise_for_status()
    found=r.json().get("result",{}).get("addressMatches",[])
   except (requests.RequestException,ValueError,TypeError):
@@ -256,6 +306,8 @@ def address():
    paid=rooftop_geocode(result["address"],lat,lon)
    improved=paid or government
   if improved:result.update(improved)
+  # Classify suburbs by MSA boundary (not the municipality in the address).
+  result["metro_priority"]=metro_at_location(lat,lon,m.get("geographies"))
   if fips in OHIO_COUNTIES:
    result["imagery_coverage"]=ohio_county_info(fips)
   elif fips in INDIANA_COUNTIES:
