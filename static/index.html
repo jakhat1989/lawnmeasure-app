@@ -23,6 +23,7 @@
 <button id="centerPin" disabled>⌖ Find house pin</button><button id="placePin" disabled style="background:#d8e8ff;color:#1e4d94">⌖ Place pin on roof</button><button id="resetPin" disabled>Reset pin</button><button id="togglePin" disabled>Hide pin</button></div>
 <p id="pinStatus" role="status" class="hint" style="margin:0 0 12px;padding:9px;background:#ecf3ff;border-radius:8px">🏠 The searched home will get a house pin. A street-address result can be approximate; tap Place pin on roof for a correction that stays saved in this browser.</p><p id="drawingHint" role="status" class="hint" style="padding:9px 11px;background:#eaf4ec;border-radius:8px">Find an address, then select Draw lawn to begin.</p><div class="map-wrap"><div id="map"></div></div>
 <p id="imageryStatus" class="hint" role="status" aria-live="polite" style="background:#e7f6e9;padding:12px;border-radius:9px;margin:12px 0;font-weight:650">Top 50 metro aerial imagery focus. Existing government state and national services are still available. Search a property to see what imagery is actually displayed.</p>
+<p id="houstonImageryStatus" class="hint" role="status" aria-live="polite" style="display:none;padding:12px;border-radius:9px;background:#fff4d6;margin:10px 0">Houston metro imagery: checking public high-resolution sources…</p>
 <p id="metroPriorityStatus" role="status" aria-live="polite" class="hint" style="padding:10px;background:#eef3fa;border-radius:8px;font-weight:650">Priority: 50 largest U.S. metro areas and their suburbs. Search an address to check whether it is in a target metro.</p>
 <details id="metroCoverage" style="border:1px solid #bfd2c4;padding:11px;border-radius:9px;margin:11px 0">
  <summary style="font-weight:700;cursor:pointer">Top 50 metro-area imagery tracker — includes suburbs</summary>
@@ -197,7 +198,11 @@ function chooseImagery(d){
   return 'massachusetts';
  }
  switchBaseLayer(usgsTiles);
- if(stateOf(d)==='CA'){
+ if(stateOf(d)==='TX'){
+  updateImageryLabel(inGalvestonPublishedFootprint(d)?
+   'Houston metro: checking City of Galveston 2026 aerials, then 2025 one-inch and 2024 three-inch. Coverage is city-scale only.':
+   'Houston metro: loading public federal USGS aerial imagery. The broader region has 2024 six-inch H-GAC imagery, but it requires a commercial imagery license.');
+ }else if(stateOf(d)==='CA'){
   const californiaSource=d.county_fips==='06055'?'Napa County 2025 ~3-inch':
    d.county_fips==='06073'?'San Diego 2023 public 9-inch':
    'California 2022 NAIP 60-cm statewide';
@@ -340,6 +345,32 @@ $('togglePin').onclick=()=>{
  showPinStatus(housePinShown?'🏠 Pin visible. You may drag it onto the roof.':'House pin hidden to let you trace the property. Tap Show pin to restore it.');
 };
 const drawingLayers=L.featureGroup().addTo(map);
+function inGalvestonPublishedFootprint(d){
+ return stateOf(d)==='TX'&&d.lat>=29.09&&d.lat<=29.55&&d.lon>=-95.23&&d.lon<=-94.40;
+}
+function updateHoustonImageryStatus(d,provider,native){
+ const box=$('houstonImageryStatus');
+ const metro=d&&d.metro_priority;
+ const houston=stateOf(d)==='TX'&&(
+  (metro&&metro.target===true&&metro.rank===5)||
+  (d.lat>=28.75&&d.lat<=30.55&&d.lon>=-96.15&&d.lon<=-94.2)
+ );
+ if(!houston){box.style.display='none';return}
+ box.style.display='block';
+ const galveston=inGalvestonPublishedFootprint(d);
+ if(provider&&provider.startsWith('TX_GALVESTON_')){
+  box.style.background='#e7f6e9';
+  box.textContent='✓ Houston metro — City of Galveston high-resolution image loaded ('+provider+
+   '). '+(native&&native!=='unknown'?'Published native resolution '+native+' inches.':
+    'Native resolution of this particular release is not confirmed.')+
+   ' This city-service imagery does not cover all of Houston, Katy, Sugar Land or The Woodlands.';
+ }else{
+  box.style.background='#fff4d6';
+  box.textContent=(galveston?'⚠️ Galveston high-resolution imagery could not be loaded here. ':
+   '⚠️ Houston metro: no verified freely reusable 3–6-inch provider is connected for this property. ')+
+   'The map is using public federal imagery, which may be blurry. H-GAC sells 2024 six-inch photography for the broader Houston-Galveston region; commercial usage and delivery permissions must be arranged with them.';
+ }
+}
 function updateMetroPriority(d){
  const element=$('metroPriorityStatus');
  const metro=d&&d.metro_priority;
@@ -674,6 +705,7 @@ $('searchForm').onsubmit=async e=>{
   const pinLocation=housePin.getLatLng();
   const mode=chooseImagery(d);
   updateMetroPriority(d);
+  updateHoustonImageryStatus(d,null,null);
   if(stateOf(d)==='OH')checkOhioImageMetadata(d);
   else $('ohioImageMetadata').style.display='none';
   if(stateOf(d)==='IN')updateIndianaMetadata(d);
@@ -739,6 +771,7 @@ async function loadAerial(force=false){
   if(controller.signal.aborted)return false;
   if(blob.size<4500||!blob.type.startsWith('image/'))throw new Error('Image service returned invalid data.');
   const source=response.headers.get('X-Imagery-Source')||'Government aerial imagery';
+  const provider=response.headers.get('X-Imagery-Provider')||'';
   const coverage=response.headers.get('X-Imagery-Coverage')||'national';
   const native=response.headers.get('X-Imagery-Native-Inches')||'unknown';
   const vintage=response.headers.get('X-Imagery-Vintage')||'varies';
@@ -752,6 +785,7 @@ async function loadAerial(force=false){
    updateImageryLabel('Detailed photo could not display. The fallback basemap is visible.');
   });
   next.on('load',()=>{
+   if(origin&&stateOf(origin)==='TX')updateHoustonImageryStatus(origin,provider,native);
    updateImageryLabel('✓ Displaying '+source+' ('+coverage+
     '; advertised native '+(native==='unknown'?'resolution unconfirmed':native+' inches')+
     '; imagery '+vintage+'). Provider availability and actual coverage vary by property.');
@@ -766,6 +800,7 @@ async function loadAerial(force=false){
   return true;
  }catch(ex){
   if(ex.name!=='AbortError'){
+   if(origin&&stateOf(origin)==='TX')updateHoustonImageryStatus(origin,null,null);
    updateImageryLabel('⚠️ No sharper government image available here: '+ex.message+
      ' The national USGS basemap remains visible and may be blurry at rooftop level.');
   }
