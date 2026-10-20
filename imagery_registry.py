@@ -10,6 +10,22 @@ STATE_CODES=frozenset(("AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME
 # Entries: display label, public image URL, service type, approximate native inch/pixel,
 # source vintage, publisher, documentation or authoritative service metadata URL.
 SOURCES={
+ # City of Galveston official aerials (Galveston subdivision of Houston metro).
+ # The city service is public but commercial redistribution terms still require
+ # independent review. Explicit geofencing prevents these small-area rasters from
+ # being served across the much larger Houston/Pasadena/Woodlands MSA.
+ "TX_GALVESTON_2026":("City of Galveston official aerial photography 2026",
+  "https://gis.galvestontx.gov/image/rest/services/Basemap/Aerial_2026/ImageServer/exportImage",
+  "image",None,"2026","City of Galveston GIS (reuse rights to verify)",
+  "https://gis.galvestontx.gov/image/rest/services/Basemap/Aerial_2026/ImageServer"),
+ "TX_GALVESTON_2025_1IN":("City of Galveston 2025 one-inch orthophotography",
+  "https://gis.galvestontx.gov/image/rest/services/Basemap/AERIALS_Aerial_2025/ImageServer/exportImage",
+  "image",1,"2025","City of Galveston GIS (reuse rights to verify)",
+  "https://gis.galvestontx.gov/image/rest/services/Basemap/AERIALS_Aerial_2025/ImageServer"),
+ "TX_GALVESTON_2024_3IN":("City of Galveston 2024 three-inch orthophotography",
+  "https://gis.galvestontx.gov/image/rest/services/Basemap/Aerials2024/ImageServer/exportImage",
+  "image",3,"2024","City of Galveston GIS (reuse rights to verify)",
+  "https://gis.galvestontx.gov/image/rest/services/Basemap/Aerials2024/ImageServer"),
  "CA_NAPA_2025":("Napa County CA April 2025 ~2.94 inch official aerial imagery",
   "https://gis.napa.ca.gov/arcgis/rest/services/OrthoImagery/NapaCountyTiles2025/ImageServer/exportImage",
   "image",2.94,"2025","Napa County GIS",
@@ -117,6 +133,12 @@ def select_government_sources(state,lat,lon,county_fips=""):
  state=str(state or "").upper()
  county_fips=str(county_fips or "")
  chosen=list(COUNTY_OVERRIDE.get(county_fips,()))
+ if state=="TX":
+  # Restrict official City of Galveston mosaics to their public approximate
+  # bounding envelope. The GALVESTON COUNTY FIPS covers considerably more land
+  # than the city image service, so it MUST NOT be routed by FIPS alone.
+  if 29.09<=lat<=29.55 and -95.23<=lon<=-94.40:
+   chosen.extend(("TX_GALVESTON_2026","TX_GALVESTON_2025_1IN","TX_GALVESTON_2024_3IN"))
  if state=="CA" and not county_fips:
   # Conservative address-search fallback limited to central Napa or the
   # San Diego metro. Do not guess county from a statewide rectangle.
