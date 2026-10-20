@@ -10,6 +10,22 @@ STATE_CODES=frozenset(("AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME
 # Entries: display label, public image URL, service type, approximate native inch/pixel,
 # source vintage, publisher, documentation or authoritative service metadata URL.
 SOURCES={
+ "CA_NAPA_2025":("Napa County CA April 2025 ~2.94 inch official aerial imagery",
+  "https://gis.napa.ca.gov/arcgis/rest/services/OrthoImagery/NapaCountyTiles2025/ImageServer/exportImage",
+  "image",2.94,"2025","Napa County GIS",
+  "https://gis.napa.ca.gov/arcgis/rest/services/OrthoImagery/NapaCountyTiles2025/ImageServer"),
+ "CA_SAN_DIEGO_2023_9IN":("San Diego regional public 2023 9-inch aerial imagery",
+  "https://gis.sandag.org/sdgis/rest/services/Imagery/SD2023_9inch/ImageServer/exportImage",
+  "image",9,"2023","SANDAG / SanGIS / Nearmap (9-inch public domain)",
+  "https://gis.sandag.org/sdgis/rest/services/Imagery/SD2023_9inch/ImageServer/info/iteminfo"),
+ "CA_SAN_DIEGO_2017_4IN":("San Diego 2017 public 4-inch orthophotos (older alternative)",
+  "https://gis.sandag.org/sdgis/rest/services/Imagery/SD2017_4inch/ImageServer/exportImage",
+  "image",4,"2017","SANDAG / SanGIS public four-inch 2017 dataset",
+  "https://gis.sandag.org/sdgis/rest/services/Imagery/SD2017_4inch/ImageServer/info/iteminfo"),
+ "CA_CDFW_NAIP_2022":("California CDFW NAIP 2022 60-centimeter natural color aerial",
+  "https://gis.wildlife.ca.gov/images/rest/services/Base_Remote_Sensing/NAIP_2022/ImageServer/exportImage",
+  "image",23.62,"2022","California Department of Fish and Wildlife / USDA (CC BY)",
+  "https://catalog.data.gov/dataset/naip-2022-60cm-california"),
  "IN_HAMILTON_2024_3IN":("Hamilton County IN 2024 native 3-inch orthophotos",
   "https://di-ingov.img.arcgis.com/arcgis/rest/services/DynamicWebMercator/Indiana_County_Collect_2024_Imagery/ImageServer/exportImage",
   "image",3,"2024","Indiana Geographic Information Office",
@@ -76,6 +92,8 @@ for block in range(1,5):
     endpoint+"/exportImage","image",6,"2025","Illinois State Geological Survey",endpoint)
 
 COUNTY_OVERRIDE={
+ "06055":("CA_NAPA_2025",),
+ "06073":("CA_SAN_DIEGO_2023_9IN","CA_SAN_DIEGO_2017_4IN"),
  "18057":("IN_HAMILTON_2024_3IN",),
  "18081":("IN_JOHNSON_NORTH_2025",),
  "39089":("OH_LICKING_2025",),
@@ -88,6 +106,7 @@ STATE_SERVICES={
  "MD":("MD_3IN","MD_6IN"),
  "OH":("OH_OSIP_DYNAMIC",),
  "IN":("IN_CURRENT",),
+ "CA":("CA_CDFW_NAIP_2022",),
  "NC":("NC_LATEST",),
 }
 # Massachusetts 2025 public TILE cache is in frontend (3-inch Cape Cod; 6-inch elsewhere).
@@ -127,6 +146,7 @@ def coverage_summary():
  curated={"KY":"3-inch state tile service","MA":"2025 3/6-inch state tile service",
    "OH":"OSIP statewide 2018-2025 mixed-resolution cache; Licking 3-inch and Stark 6-inch county sources",
    "IN":"Indiana latest 2022-2025 6-inch generally, selected 3-inch; 2026 bulk files in 9 counties not live",
+   "CA":"58 counties tracked; Napa 2025 ~3-inch and San Diego 2023 9-inch; statewide 2022 60cm baseline is not 3-inch",
    "MD":"partial 3-inch plus statewide 6-inch","NC":"statewide latest 6-inch",
    "IL":"2025 regional 6-inch block services plus Cook County",
    "FL":"selected county/district high-resolution services"}
