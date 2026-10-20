@@ -22,8 +22,17 @@
 <section class="card"><h2>2. Aerial property view</h2><div class="map-btns"><button id="drawLawn" class="primary" disabled>+ Draw lawn</button><button id="drawExclude" disabled>− Exclude house / driveway</button><button id="finishDraw" disabled style="background:#156a3d;color:white">✓ Finish drawing</button><button id="cancelDraw" disabled>Cancel drawing</button><button id="undo" disabled>Undo last shape</button><button id="refresh" disabled>Refresh view</button>
 <button id="centerPin" disabled>⌖ Find house pin</button><button id="placePin" disabled style="background:#d8e8ff;color:#1e4d94">⌖ Place pin on roof</button><button id="resetPin" disabled>Reset pin</button><button id="togglePin" disabled>Hide pin</button></div>
 <p id="pinStatus" role="status" class="hint" style="margin:0 0 12px;padding:9px;background:#ecf3ff;border-radius:8px">🏠 The searched home will get a house pin. A street-address result can be approximate; tap Place pin on roof for a correction that stays saved in this browser.</p><p id="drawingHint" role="status" class="hint" style="padding:9px 11px;background:#eaf4ec;border-radius:8px">Find an address, then select Draw lawn to begin.</p><div class="map-wrap"><div id="map"></div></div>
-<p id="imageryStatus" class="hint" role="status" aria-live="polite" style="background:#e7f6e9;padding:12px;border-radius:9px;margin:12px 0;font-weight:650">Kentucky 3-inch imagery, government regional aerials, and nationwide federal imagery. Search a property to see which source loads.</p>
-<p id="ohioImageMetadata" class="hint" role="status" aria-live="polite" style="display:none;padding:8px;background:#eef3fa;border-radius:8px">Checking Ohio OSIP photo year and native resolution…</p>
+<p id="imageryStatus" class="hint" role="status" aria-live="polite" style="background:#e7f6e9;padding:12px;border-radius:9px;margin:12px 0;font-weight:650">Top 50 metro aerial imagery focus. Existing government state and national services are still available. Search a property to see what imagery is actually displayed.</p>
+<p id="metroPriorityStatus" role="status" aria-live="polite" class="hint" style="padding:10px;background:#eef3fa;border-radius:8px;font-weight:650">Priority: 50 largest U.S. metro areas and their suburbs. Search an address to check whether it is in a target metro.</p>
+<details id="metroCoverage" style="border:1px solid #bfd2c4;padding:11px;border-radius:9px;margin:11px 0">
+ <summary style="font-weight:700;cursor:pointer">Top 50 metro-area imagery tracker — includes suburbs</summary>
+ <p class="hint">The targets use the Census Bureau's July 2025 metro-population ranking and 2025 Census metropolitan boundaries. Each metro includes its outlying suburban counties. Native rooftop imagery, photo year and usage rights must still be verified metro by metro.</p>
+ <div id="metroTracker" style="max-height:360px;overflow:auto">Sign in and expand to load all 50 metro priorities.</div>
+</details>
+<details id="oldCountyTrackers" style="border:1px solid #e1e8e1;padding:11px;border-radius:9px;margin:11px 0">
+ <summary style="font-weight:700;cursor:pointer">Earlier statewide county trackers (preserved)</summary>
+ <p class="hint">Existing California, Indiana and Ohio county research remains available for reference, but the 50 metro areas are now the priority for improving aerial imagery.</p>
+<p id="ohioImageMetadata" role="status" aria-live="polite" style="display:none;padding:8px;background:#eef3fa;border-radius:8px">Checking Ohio OSIP photo year and native resolution…</p>
 <p id="indianaImageMetadata" class="hint" role="status" aria-live="polite" style="display:none;background:#eef4e9;padding:8px;border-radius:8px">Checking Indiana official imagery year and pixel resolution…</p>
 <details id="californiaCoverage" style="border:1px solid #dee9dd;padding:11px;border-radius:9px;margin:11px 0">
  <summary style="font-weight:700;cursor:pointer">California imagery tracker — all 58 counties</summary>
@@ -40,7 +49,8 @@
  <p class="hint">Source registry for all counties. Statewide imagery is configured; each county's actual photograph year, native resolution, sample clarity, and usage rights still require verification.</p>
  <div id="ohioCountyRows" style="max-height:320px;overflow:auto">Open this section after signing in to load Ohio county status.</div>
 </details>
-<p class="hint">Curated public imagery currently includes California (Napa County 2025 ~3-inch, San Diego 2023 public 9-inch, and statewide CDFW NAIP 2022 60-cm fallback), Indiana (official IGIO current 2022–2025 six-inch generally, some three-inch; 2026 three-inch downloadable in nine counties but not yet live in the image service), Ohio (OSIP statewide 2018–2025 imagery, 2025 Licking County 3-inch and Stark County 6-inch alternatives), Kentucky (3-inch), Massachusetts (2025; 3-inch Cape Cod / 6-inch elsewhere), Maryland (3-inch in selected areas / 6-inch statewide), North Carolina (latest 6-inch), Illinois (Cook County and 2025 blocks, 6-inch), and selected Florida counties. All other states still use federal USDA/USGS imagery, which may be blurry at rooftop level. No Esri World Imagery or Mapbox subscription is used; public government services may run on ArcGIS Server software. <strong>No U.S. county is yet certified as fully audited for coverage, rights, and reliability.</strong></p>
+</details>
+<p class="hint">Existing state, county, and nationwide government aerial services remain active as fallbacks, including California (Napa County 2025 ~3-inch, San Diego 2023 public 9-inch, and statewide CDFW NAIP 2022 60-cm fallback), Indiana (official IGIO current 2022–2025 six-inch generally, some three-inch; 2026 three-inch downloadable in nine counties but not yet live in the image service), Ohio (OSIP statewide 2018–2025 imagery, 2025 Licking County 3-inch and Stark County 6-inch alternatives), Kentucky (3-inch), Massachusetts (2025; 3-inch Cape Cod / 6-inch elsewhere), Maryland (3-inch in selected areas / 6-inch statewide), North Carolina (latest 6-inch), Illinois (Cook County and 2025 blocks, 6-inch), and selected Florida counties. All other states still use federal USDA/USGS imagery, which may be blurry at rooftop level. No Esri World Imagery or Mapbox subscription is used; public government services may run on ArcGIS Server software. <strong>No U.S. county is yet certified as fully audited for coverage, rights, and reliability.</strong></p>
 <p class="hint">Photograph date, coverage, and commercial-reuse terms differ among providers. Confirm site conditions before issuing final quotes. Drawing area is approximate, not a property survey.</p></section>
 <section class="card"><h2>3. Services & quote</h2><div class="row"><input id="newService" placeholder="New service name"><button id="addService">Add</button></div><p class="hint">Check services to include in the quote. Enter a rate per 1,000 sq ft and an optional minimum charge.</p><div id="services"></div><h3>Customer details</h3><label>Customer name</label><input id="customerName" placeholder="Customer name"><label>Customer email</label><input id="customerEmail" type="email" placeholder="customer@example.com"><label>Quote notes</label><textarea id="notes" rows="3" placeholder="Services, schedule or estimate notes"></textarea><hr style="border:none;border-top:1px solid #e1e8e1;margin:18px 0"><div class="hint">Total estimated selected services</div><div id="total" class="total">$0.00</div><button class="primary" id="send" style="width:100%;margin:12px 0">Open email app — customer + owner CC</button><button id="copy" style="width:100%">Copy estimate text</button><p id="emailStatus" class="status" role="status" aria-live="polite"></p>
 <details id="emailSetup" style="margin-top:12px;padding:12px;background:#f0f6ef;border-radius:9px">
@@ -330,6 +340,64 @@ $('togglePin').onclick=()=>{
  showPinStatus(housePinShown?'🏠 Pin visible. You may drag it onto the roof.':'House pin hidden to let you trace the property. Tap Show pin to restore it.');
 };
 const drawingLayers=L.featureGroup().addTo(map);
+function updateMetroPriority(d){
+ const element=$('metroPriorityStatus');
+ const metro=d&&d.metro_priority;
+ if(!metro||metro.target===null){
+  element.textContent='Metro target could not be verified right now. Existing aerial photo and square-footage tools remain available.';
+  element.style.background='#fff0d2';
+  return;
+ }
+ if(metro.target===true){
+  element.textContent='✓ TOP 50 METRO PRIORITY #'+metro.rank+': '+metro.name+
+   ' (2025 population '+Number(metro.population_2025).toLocaleString()+
+   '). Official metro boundaries include the suburbs and surrounding counties. High-resolution imagery is not yet certified.';
+  element.style.background='#e7f6e9';
+  return;
+ }
+ element.textContent='Outside the 50 priority metro areas'+(metro.name?': '+metro.name:'')+
+  '. Property measurement still works; existing government aerial imagery will be used.';
+ element.style.background='#eef3fa';
+}
+let metroTrackerLoaded=false;
+$('metroCoverage').addEventListener('toggle',async()=>{
+ if(!$('metroCoverage').open||metroTrackerLoaded)return;
+ const area=$('metroTracker');
+ area.textContent='Loading the 50 largest U.S. metropolitan areas…';
+ try{
+  const data=await api('/api/top-metros');
+  const rows=data.metros||[];
+  if(rows.length!==50)throw Error('Top 50 metro list is incomplete');
+  area.replaceChildren();
+  const line=document.createElement('p');line.className='hint';
+  line.textContent='50 metro areas ranked by July 2025 population · including suburban counties · '+
+    data.metro_qa_completed+' fully audited. Existing state/county aerial sources remain as fallbacks.';
+  area.appendChild(line);
+  const table=document.createElement('table');
+  table.style.cssText='width:100%;border-collapse:collapse;font-size:12px';
+  const header=document.createElement('tr');
+  for(const word of ['Rank','Metropolitan area (includes suburbs)','2025 population','Image audit']){
+   const cell=document.createElement('th');cell.textContent=word;
+   cell.style.cssText='padding:6px;text-align:left;border-bottom:1px solid #cbd9ce;white-space:nowrap';
+   header.appendChild(cell);
+  }
+  table.appendChild(header);
+  for(const item of rows){
+   const row=document.createElement('tr');
+   const values=[item.rank,item.name,Number(item.population_2025).toLocaleString(),
+     item.metro_image_qa_complete?'Complete':'Pending'];
+   for(const value of values){
+    const cell=document.createElement('td');cell.textContent=String(value);
+    cell.style.cssText='padding:6px;border-bottom:1px solid #e6eae6';
+    row.appendChild(cell);
+   }
+   table.appendChild(row);
+  }
+  area.appendChild(table);
+  metroTrackerLoaded=true;
+ }catch(e){area.textContent='Metro tracker could not load: '+e.message}
+});
+
 let californiaTrackerLoaded=false;
 $('californiaCoverage').addEventListener('toggle',async()=>{
  if(!$('californiaCoverage').open||californiaTrackerLoaded)return;
@@ -605,6 +673,7 @@ $('searchForm').onsubmit=async e=>{
   }
   const pinLocation=housePin.getLatLng();
   const mode=chooseImagery(d);
+  updateMetroPriority(d);
   if(stateOf(d)==='OH')checkOhioImageMetadata(d);
   else $('ohioImageMetadata').style.display='none';
   if(stateOf(d)==='IN')updateIndianaMetadata(d);
