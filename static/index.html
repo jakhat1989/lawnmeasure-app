@@ -25,6 +25,11 @@
 <p id="imageryStatus" class="hint" role="status" aria-live="polite" style="background:#e7f6e9;padding:12px;border-radius:9px;margin:12px 0;font-weight:650">Kentucky 3-inch imagery, government regional aerials, and nationwide federal imagery. Search a property to see which source loads.</p>
 <p id="ohioImageMetadata" class="hint" role="status" aria-live="polite" style="display:none;padding:8px;background:#eef3fa;border-radius:8px">Checking Ohio OSIP photo year and native resolution…</p>
 <p id="indianaImageMetadata" class="hint" role="status" aria-live="polite" style="display:none;background:#eef4e9;padding:8px;border-radius:8px">Checking Indiana official imagery year and pixel resolution…</p>
+<details id="californiaCoverage" style="border:1px solid #dee9dd;padding:11px;border-radius:9px;margin:11px 0">
+ <summary style="font-weight:700;cursor:pointer">California imagery tracker — all 58 counties</summary>
+ <p class="hint">Napa 2025 imagery is about 2.94 inches/pixel, San Diego public 2023 imagery is 9 inches/pixel; California statewide 2022 imagery is only 60 cm (~23.6 inches). Commercial image rights, coverage and 3-rooftop visual checks remain pending by county.</p>
+ <div id="californiaCountyRows" style="max-height:320px;overflow:auto">Sign in and open this section for all 58 county records.</div>
+</details>
 <details id="indianaCoverage" style="border:1px solid #dee9dd;padding:11px;border-radius:9px;margin:11px 0">
  <summary style="font-weight:700;cursor:pointer">Indiana imagery tracker — all 92 counties</summary>
  <p class="hint">Indiana IGIO current state imagery (2022–2025) is configured. 2026 three-inch datasets are publicly downloadable in 9 counties but are not yet displayed from an identified live map service. All county image-quality audits remain pending.</p>
@@ -35,7 +40,7 @@
  <p class="hint">Source registry for all counties. Statewide imagery is configured; each county's actual photograph year, native resolution, sample clarity, and usage rights still require verification.</p>
  <div id="ohioCountyRows" style="max-height:320px;overflow:auto">Open this section after signing in to load Ohio county status.</div>
 </details>
-<p class="hint">Curated public imagery currently includes Indiana (official IGIO current 2022–2025 six-inch generally, some three-inch; 2026 three-inch downloadable in nine counties but not yet live in the image service), Ohio (OSIP statewide 2018–2025 imagery, 2025 Licking County 3-inch and Stark County 6-inch alternatives), Kentucky (3-inch), Massachusetts (2025; 3-inch Cape Cod / 6-inch elsewhere), Maryland (3-inch in selected areas / 6-inch statewide), North Carolina (latest 6-inch), Illinois (Cook County and 2025 blocks, 6-inch), and selected Florida counties. All other states still use federal USDA/USGS imagery, which may be blurry at rooftop level. No Esri World Imagery or Mapbox subscription is used; public government services may run on ArcGIS Server software. <strong>No U.S. county is yet certified as fully audited for coverage, rights, and reliability.</strong></p>
+<p class="hint">Curated public imagery currently includes California (Napa County 2025 ~3-inch, San Diego 2023 public 9-inch, and statewide CDFW NAIP 2022 60-cm fallback), Indiana (official IGIO current 2022–2025 six-inch generally, some three-inch; 2026 three-inch downloadable in nine counties but not yet live in the image service), Ohio (OSIP statewide 2018–2025 imagery, 2025 Licking County 3-inch and Stark County 6-inch alternatives), Kentucky (3-inch), Massachusetts (2025; 3-inch Cape Cod / 6-inch elsewhere), Maryland (3-inch in selected areas / 6-inch statewide), North Carolina (latest 6-inch), Illinois (Cook County and 2025 blocks, 6-inch), and selected Florida counties. All other states still use federal USDA/USGS imagery, which may be blurry at rooftop level. No Esri World Imagery or Mapbox subscription is used; public government services may run on ArcGIS Server software. <strong>No U.S. county is yet certified as fully audited for coverage, rights, and reliability.</strong></p>
 <p class="hint">Photograph date, coverage, and commercial-reuse terms differ among providers. Confirm site conditions before issuing final quotes. Drawing area is approximate, not a property survey.</p></section>
 <section class="card"><h2>3. Services & quote</h2><div class="row"><input id="newService" placeholder="New service name"><button id="addService">Add</button></div><p class="hint">Check services to include in the quote. Enter a rate per 1,000 sq ft and an optional minimum charge.</p><div id="services"></div><h3>Customer details</h3><label>Customer name</label><input id="customerName" placeholder="Customer name"><label>Customer email</label><input id="customerEmail" type="email" placeholder="customer@example.com"><label>Quote notes</label><textarea id="notes" rows="3" placeholder="Services, schedule or estimate notes"></textarea><hr style="border:none;border-top:1px solid #e1e8e1;margin:18px 0"><div class="hint">Total estimated selected services</div><div id="total" class="total">$0.00</div><button class="primary" id="send" style="width:100%;margin:12px 0">Open email app — customer + owner CC</button><button id="copy" style="width:100%">Copy estimate text</button><p id="emailStatus" class="status" role="status" aria-live="polite"></p>
 <details id="emailSetup" style="margin-top:12px;padding:12px;background:#f0f6ef;border-radius:9px">
@@ -182,7 +187,13 @@ function chooseImagery(d){
   return 'massachusetts';
  }
  switchBaseLayer(usgsTiles);
- if(stateOf(d)==='IN'){
+ if(stateOf(d)==='CA'){
+  const californiaSource=d.county_fips==='06055'?'Napa County 2025 ~3-inch':
+   d.county_fips==='06073'?'San Diego 2023 public 9-inch':
+   'California 2022 NAIP 60-cm statewide';
+  updateImageryLabel('California imagery: loading '+californiaSource+
+   '. If unavailable, USGS national imagery is the fallback. Coverage and sharpness vary by address.');
+ }else if(stateOf(d)==='IN'){
   const special=d.county_fips==='18057'?' (checking Hamilton County 2024 3-inch first)':
    d.county_fips==='18081'?' (checking north Johnson County 2025 first)':'';
   updateImageryLabel('Indiana IGIO official current 2022–2025 orthophotography, usually six-inch and sometimes three-inch'+special+'. 2026 downloaded three-inch COGs are not yet streamed here.');
@@ -319,6 +330,48 @@ $('togglePin').onclick=()=>{
  showPinStatus(housePinShown?'🏠 Pin visible. You may drag it onto the roof.':'House pin hidden to let you trace the property. Tap Show pin to restore it.');
 };
 const drawingLayers=L.featureGroup().addTo(map);
+let californiaTrackerLoaded=false;
+$('californiaCoverage').addEventListener('toggle',async()=>{
+ if(!$('californiaCoverage').open||californiaTrackerLoaded)return;
+ const area=$('californiaCountyRows');
+ area.textContent='Loading 58 California county records…';
+ try{
+  const data=await api('/api/california-counties');
+  const rows=data.county_rows||[];
+  if(rows.length!==58)throw Error('Incomplete California county register.');
+  area.replaceChildren();
+  const caption=document.createElement('p');caption.className='hint';
+  caption.textContent='58 counties tracked · 2 county-level aerial sources configured · '+
+    data.county_audits_completed+' independently audited. The statewide baseline is only ~23.6 in/pixel.';
+  area.appendChild(caption);
+  const table=document.createElement('table');
+  table.style.cssText='width:100%;border-collapse:collapse;font-size:12px';
+  const headings=document.createElement('tr');
+  for(const label of ['County','FIPS','Preferred source','Pixels','QA']){
+   const cell=document.createElement('th');cell.textContent=label;
+   cell.style.cssText='text-align:left;padding:6px;border-bottom:1px solid #cbd9ce;white-space:nowrap';
+   headings.appendChild(cell);
+  }
+  table.appendChild(headings);
+  for(const item of rows){
+   const tr=document.createElement('tr');
+   const display=item.preferred_county_source==='CA_NAPA_2025'?'Napa 2025':
+    item.preferred_county_source==='CA_SAN_DIEGO_2023_9IN'?'San Diego 2023':
+    'CA NAIP 2022';
+   for(const val of [item.county,item.fips,display,
+    (item.county_source_native_inches||item.statewide_native_inches)+' in',
+    item.county_completed?'Complete':'Pending']){
+    const cell=document.createElement('td');cell.textContent=val;
+    cell.style.cssText='padding:6px;border-bottom:1px solid #e6eae6';
+    tr.appendChild(cell);
+   }
+   table.appendChild(tr);
+  }
+  area.appendChild(table);
+  californiaTrackerLoaded=true;
+ }catch(e){area.textContent='California tracker unavailable: '+e.message}
+});
+
 async function updateIndianaMetadata(d){
  const element=$('indianaImageMetadata');
  if(stateOf(d)!=='IN'){element.style.display='none';return}
