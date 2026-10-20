@@ -1,4 +1,6 @@
-# LawnQuote nationwide public-aerial imagery rollout
+# LawnQuote historical statewide and county imagery research
+
+**Current active project priority:** [Top 50 U.S. metro areas and their suburbs](TOP_50_METRO_IMAGERY_ROADMAP.md). The county-by-county expansion below is **archived as supporting research**. Existing state and county image sources continue to work as fallbacks; this document is not the active completion plan.
 
 Updated 2026-10-19. This is a **coverage audit and implementation tracker**, not a claim that county imagery is live, licensed, or three-inch resolution everywhere.
 
