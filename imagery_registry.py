@@ -117,6 +117,13 @@ def select_government_sources(state,lat,lon,county_fips=""):
  state=str(state or "").upper()
  county_fips=str(county_fips or "")
  chosen=list(COUNTY_OVERRIDE.get(county_fips,()))
+ if state=="CA" and not county_fips:
+  # Conservative address-search fallback limited to central Napa or the
+  # San Diego metro. Do not guess county from a statewide rectangle.
+  if 38.18<=lat<=38.56 and -122.52<=lon<=-122.10:
+   chosen.append("CA_NAPA_2025")
+  if 32.55<=lat<=33.1 and -117.34<=lon<=-116.82:
+   chosen.extend(("CA_SAN_DIEGO_2023_9IN","CA_SAN_DIEGO_2017_4IN"))
  if state=="IL":
   # If Census county lookup is down, retain a conservative Cook County
   # approximate region for the previously supported Chicago-area addresses.
