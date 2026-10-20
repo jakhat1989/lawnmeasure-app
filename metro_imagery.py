@@ -30,14 +30,18 @@ def _metro_key(text):
 def metro_record(index):
  name,pop=METRO_RANKING_2025[index]
  _,states=_metro_parts(name)
+ houston=index==4
  return {
   "rank":index+1,"name":name,"population_2025":pop,
   "states":states,"core_city":re.split(r"[-/]",name,1)[0],
   "boundary":"OMB metropolitan statistical area, 2025 Census TIGERweb",
-  "imagery_status":"source_research_pending",
+  "imagery_status":"regional_public_source_configured_qa_pending" if houston else "source_research_pending",
   "metro_image_qa_complete":False,
   "county_and_suburb_coverage_audited":False,
-  "note":"Existing state/county aerial fallbacks remain. No native 3-inch, source year or reuse-rights guarantee.",
+  "note":(
+   "City of Galveston 2026/2025/2024 public aerials added. Galveston 2025 ImageServer reports ~1 inch native pixels; Houston core, Katy, Sugar Land, and The Woodlands still lack a confirmed freely commercially reusable rooftop-quality imagery source. 2024 six-inch H-GAC regional photography requires purchase/license. Live imagery clarity and city service use rights are not yet audited."
+   if houston else
+   "Existing state/county aerial fallbacks remain. No native 3-inch, source year or reuse-rights guarantee."),
  }
 
 TOP_50_METROS=[metro_record(i) for i in range(50)]
